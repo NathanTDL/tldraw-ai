@@ -1,28 +1,14 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
 import { Tldraw } from "@tldraw/tldraw";
 import EnhancedSidebar from "@/components/EnhancedSidebar";
+import AISidebar from "@/components/AISidebar";
 import "@tldraw/tldraw/tldraw.css";
 
 export default function Dashboard() {
   /* ---- sidebar + chat state ---- */
-
-  const [messages, setMessages] = useState<
-    { role: "user" | "ai"; content: string }[]
-  >([{ role: "ai", content: "Hello! How can I help you transform your canvas?" }]);
-  const [input, setInput] = useState("");
-
-  const handleSend = (e: FormEvent) => {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text) return;
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setInput("");
-  };
+  const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
 
   /* ---- layout ---- */
   return (
@@ -35,37 +21,10 @@ export default function Dashboard() {
       </main>
 
       {/* ——— Right: AI chat ——— */}
-      <aside className="w-80 shrink-0 border-l bg-muted/50 flex flex-col">
-        <header className="p-4 border-b">
-          <h2 className="text-sm font-semibold">AI Assistant</h2>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {messages.map((m, i) => (
-            <Card key={i}>
-              <CardHeader className="p-2">
-                <CardTitle className="text-xs text-muted-foreground">
-                  {m.role === "user" ? "You" : "AI"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-2 text-sm whitespace-pre-wrap">
-                {m.content}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <form onSubmit={handleSend} className="p-4 border-t space-y-2">
-          <Input
-            placeholder="Ask the AI…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <Button className="w-full" type="submit">
-            Send
-          </Button>
-        </form>
-      </aside>
+      <AISidebar
+        isCollapsed={isAiSidebarCollapsed}
+        onToggleCollapse={setIsAiSidebarCollapsed}
+      />
     </div>
   );
 }
