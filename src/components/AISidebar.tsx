@@ -26,9 +26,17 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
   ]);
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gpt-4");
+const [isModelOpen, setIsModelOpen] = useState(false);
+
+const modelOptions = [
+  { value: "gpt-4", label: "GPT-4" },
+  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
+  { value: "claude-3", label: "Claude 3" },
+  { value: "gemini-pro", label: "Gemini Pro" }
+];
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -228,39 +236,57 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
       <form onSubmit={handleSend} className="p-4 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl">
         <div className="flex gap-3 items-end">
           <div className="flex-1 relative">
-            <Input
+            <textarea
               ref={inputRef}
               placeholder="Type your message..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="w-full pr-12 rounded-2xl border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200 text-sm placeholder:text-slate-400"
+              className="w-full pl-4 pr-4 py-4 rounded-2xl border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200 text-sm placeholder:text-slate-400 resize-none min-h-[120px] max-h-[200px] overflow-y-auto"
               disabled={isTyping}
+              rows={4}
             />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-slate-400">
-              {input.length}/500
+
+            {/* Model selector row */}
+            <div className="relative mt-2 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setIsModelOpen(!isModelOpen)}
+                className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+              >
+                {modelOptions.find((m) => m.value === selectedModel)?.label}
+                <ChevronDown className="w-3 h-3" />
+              </button>
+
+              {isModelOpen && (
+                <div className="absolute bottom-full mb-2 left-0 w-40 bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg shadow-lg z-20">
+                  {modelOptions.map((m) => (
+                    <button
+                      key={m.value}
+                      onClick={() => {
+                        setSelectedModel(m.value);
+                        setIsModelOpen(false);
+                      }}
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700',
+                        selectedModel === m.value && 'bg-slate-100 dark:bg-slate-700'
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
           </div>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             size="sm"
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             disabled={!input.trim() || isTyping}
           >
             <Send className="w-4 h-4" />
           </Button>
-        </div>
-        {/* Model Selection */}
-        <div className="mt-3">
-          <select 
-            value={selectedModel} 
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg px-3 py-2 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500/50 transition-all duration-200"
-          >
-            <option value="gpt-4">GPT-4</option>
-            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            <option value="claude-3">Claude 3</option>
-            <option value="gemini-pro">Gemini Pro</option>
-          </select>
         </div>
       </form>
     </aside>
