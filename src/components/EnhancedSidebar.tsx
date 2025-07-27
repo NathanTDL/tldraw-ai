@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { useAuth } from "@/contexts/AuthProvider";
 import {
@@ -19,49 +19,125 @@ import {
   Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabaseClient';
 import ProfilePage from './ProfilePage';
 
+interface CanvasItem {
+  id: string;
+  title: string;
+  is_pinned: boolean;
+  created_at: string;
+}
+
 const EnhancedSidebar = () => {
+  // Helper to create a new canvas for the current user
+  const createCanvas = async () => {
+    if (!user) {
+      openLogin();
+      return;
+    }
+    const now = new Date();
+    const title = now.toLocaleString('en-US', {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const { error } = await supabase.from('canvases').insert({
+      user_id: user.id,
+      title,
+    });
+    if (error) {
+      console.error('Create canvas error', error);
+    } else {
+      refresh();
+    }
+  };
   const { user, signOut, openLogin, requireAuth } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
   const [showUpgradeCard, setShowUpgradeCard] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
+  const [canvases, setCanvases] = useState<CanvasItem[]>([]);
+  const [loadingCanvases, setLoadingCanvases] = useState(false);
+
+  // Fetch canvases on mount / when user changes
+  useEffect(() => {
+    const fetchCanvases = async () => {
+      if (!user) return;
+      setLoadingCanvases(true);
+      const { data, error } = await supabase
+        .from('canvases')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error loading canvases', error);
+      } else {
+        setCanvases(data as CanvasItem[]);
+      }
+      setLoadingCanvases(false);
+    };
+    fetchCanvases();
+  }, [user]);
   
-  const canvasHistory = {
-    Today: [
-      { id: '1', name: 'Product Strategy Canvas', isPinned: false },
-      { id: '2', name: 'User Journey Map', isPinned: true },
-      { id: '3', name: 'Architecture Diagram', isPinned: false },
-    ],
-    Yesterday: [
-      { id: '4', name: 'Mind Map - Features', isPinned: false },
-      { id: '5', name: 'Wireframe Sketches', isPinned: true },
-    ],
-    Older: [
-      { id: '6', name: 'Brand Guidelines', isPinned: false },
-      { id: '7', name: 'System Flow Chart', isPinned: false },
-      { id: '8', name: 'Meeting Notes Visual', isPinned: false },
-    ],
-  };
+  // Categorise canvases for UI
+  const canvasHistory = React.useMemo(() => {
+    const today: CanvasItem[] = [];
+    const yesterday: CanvasItem[] = [];
+    const older: CanvasItem[] = [];
+
+    const now = new Date();
+    canvases.forEach(c => {
+      const created = new Date(c.created_at);
+      const diffDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) today.push(c);
+      else if (diffDays === 1) yesterday.push(c);
+      else older.push(c);
+    });
+    return { Today: today, Yesterday: yesterday, Older: older } as Record<string, CanvasItem[]>;
+  }, [canvases]);
+
 
   const handleContextMenu = (itemId: string, e: React.MouseEvent) => {
     e.preventDefault();
     setActiveContextMenu(activeContextMenu === itemId ? null : itemId);
   };
 
+  const pinCanvas = async (id: string, value: boolean) => {
+    const { error } = await supabase.from('canvases').update({ is_pinned: value, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) console.error('Pin error', error);
+  };
+  const renameCanvas = async (id: string) => {
+    const newTitle = prompt('New canvas title');
+    if (!newTitle) return;
+    const { error } = await supabase.from('canvases').update({ title: newTitle, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) console.error('Rename error', error);
+  };
+  const deleteCanvas = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this canvas?')) return;
+    const { error } = await supabase.from('canvases').delete().eq('id', id);
+    if (error) console.error('Delete error', error);
+  };
+
+  const refresh = async () => {
+    if (!user) return;
+    const { data, error } = await supabase.from('canvases').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+    if (!error) setCanvases(data as CanvasItem[]);
+  };
+
   const ContextMenu = ({ itemId, onClose }: { itemId: string, onClose: () => void }) => (
     <div className="absolute right-0 top-0 mt-8 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 backdrop-blur-sm">
       <div className="py-2">
-        <button className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-900/20 dark:hover:to-purple-900/20 flex items-center gap-2 transition-all duration-200">
+        <button onClick={async () => { await pinCanvas(itemId, true); onClose(); refresh(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-900/20 dark:hover:to-purple-900/20 flex items-center gap-2 transition-all duration-200">
           <Pin className="h-3 w-3 text-blue-500" />
           <span className="font-medium">Pin</span>
         </button>
-        <button className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 dark:hover:from-green-900/20 dark:hover:to-emerald-900/20 flex items-center gap-2 transition-all duration-200">
+        <button onClick={async () => { await renameCanvas(itemId); onClose(); refresh(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 dark:hover:from-green-900/20 dark:hover:to-emerald-900/20 flex items-center gap-2 transition-all duration-200">
           <Edit3 className="h-3 w-3 text-green-500" />
           <span className="font-medium">Rename</span>
         </button>
-        <button className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 dark:hover:from-red-900/20 dark:hover:to-pink-900/20 flex items-center gap-2 text-red-600 transition-all duration-200">
+        <button onClick={async () => { await deleteCanvas(itemId); onClose(); refresh(); }} className="w-full px-3 py-2 text-left text-sm hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 dark:hover:from-red-900/20 dark:hover:to-pink-900/20 flex items-center gap-2 text-red-600 transition-all duration-200">
           <Trash2 className="h-3 w-3" />
           <span className="font-medium">Delete</span>
         </button>
@@ -168,8 +244,9 @@ const EnhancedSidebar = () => {
           {/* New Canvas Button */}
           <div className="p-4">
             <Button 
-              className="w-full justify-center h-11 font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.01] border border-slate-700 dark:border-slate-600"
-            >
+               onClick={createCanvas}
+               className="w-full justify-center h-11 font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.01] border border-slate-700 dark:border-slate-600"
+             >
               <Plus className="h-4 w-4 mr-2" />
               <Sparkles className="h-3.5 w-3.5 mr-1" />
               New Canvas
@@ -178,7 +255,9 @@ const EnhancedSidebar = () => {
 
           {/* Canvas History */}
           <div className="flex-1 overflow-auto px-4">
-            {Object.entries(canvasHistory).map(([period, items]) => (
+            {Object.entries(canvasHistory)
+              .filter(([, items]) => items.length > 0)
+              .map(([period, items]) => (
               <div key={period} className="mb-6">
                 <h3 className="text-xs font-semibold text-sidebar-foreground/70 tracking-wider mb-3">
                   {period}
@@ -190,7 +269,7 @@ const EnhancedSidebar = () => {
                         variant="ghost"
                         className="w-full text-gray-700 justify-start h-9 text-sm font-medium hover:bg-gradient-to-r hover:from-sidebar-accent hover:to-sidebar-accent/50 hover:text-sidebar-accent-foreground pr-8 rounded-lg transition-all duration-200 hover:shadow-md"
                       >
-                        <span className="flex-1 text-left truncate">{item.name}</span>
+                        <span className="flex-1 text-left truncate">{item.title}</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -218,9 +297,15 @@ const EnhancedSidebar = () => {
             <div className="px-4 pb-4">
               <div className="p-3 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-pink-500 text-white shadow-lg transform transition-all duration-300 hover:scale-[1.02] relative">
                 <button 
-                  onClick={() => {
+                  onClick={async () => {
                     if (!requireAuth()) return;
-                    // proceed with create canvas
+                    const title = new Date().toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true });
+                    const { data, error } = await supabase.from('canvases').insert({ title, user_id: user!.id, is_pinned: false });
+                    if (error) console.error('Create canvas error', error);
+                    else {
+                      // optionally redirect to editor page with new canvas id
+                    }
+                    refresh();
                   }} 
                   className="absolute top-1 right-1 text-white hover:text-red-400 transition-all duration-200"
                 >
@@ -291,6 +376,7 @@ const EnhancedSidebar = () => {
       )}
     </aside>
   );
+
 };
 
 export default EnhancedSidebar;
