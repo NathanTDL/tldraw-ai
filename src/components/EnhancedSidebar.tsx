@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import React, { useState } from 'react';
 import { Button } from './ui/button';
+import { useAuth } from "@/contexts/AuthProvider";
 import {
   Settings,
   User,
@@ -18,11 +19,14 @@ import {
   Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ProfilePage from './ProfilePage';
 
 const EnhancedSidebar = () => {
+  const { user, signOut, openLogin, requireAuth } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
   const [showUpgradeCard, setShowUpgradeCard] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
   
   const canvasHistory = {
     Today: [
@@ -105,7 +109,10 @@ const EnhancedSidebar = () => {
           {/* Profile Icon */}
           <div className="flex justify-center p-2">
             <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+              <div 
+                onClick={() => setShowProfile(true)}
+                className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
+              >
                 <User className="h-5 w-5 text-white" />
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-sidebar" />
@@ -211,7 +218,10 @@ const EnhancedSidebar = () => {
             <div className="px-4 pb-4">
               <div className="p-3 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-pink-500 text-white shadow-lg transform transition-all duration-300 hover:scale-[1.02] relative">
                 <button 
-                  onClick={() => setShowUpgradeCard(false)} 
+                  onClick={() => {
+                    if (!requireAuth()) return;
+                    // proceed with create canvas
+                  }} 
                   className="absolute top-1 right-1 text-white hover:text-red-400 transition-all duration-200"
                 >
                   x
@@ -236,27 +246,48 @@ const EnhancedSidebar = () => {
 
           {/* Profile Section */}
           <div className="border-t border-sidebar-border p-4">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                  <User className="h-4 w-4 text-white" />
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="relative cursor-pointer" onClick={() => window.location.href = '/profile'}>
+                  <img
+                    src={user.user_metadata?.avatar_url ?? "/default-avatar.png"}
+                    alt="avatar"
+                    className="w-8 h-8 rounded-full hover:scale-105 transition-transform"
+                  />
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-sidebar" />
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => window.location.href = '/profile'}>
+                  <p className="text-sm font-medium text-sidebar-foreground truncate hover:text-blue-600 transition-colors">
+                    {user.user_metadata?.full_name ?? user.email}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => window.location.href = '/profile'}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  Nathan G.
-                </p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">
-                  nathan@weplit.ai
-                </p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Settings className="h-4 w-4" />
+            ) : (
+              <Button
+                className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white"
+                onClick={openLogin}
+              >
+                Login
               </Button>
-            </div>
+            )}
           </div>
         </>
+      )}
+      
+      {/* Profile Page Modal */}
+      {showProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-4/5 max-w-4xl h-4/5 max-h-[90vh] rounded-xl shadow-2xl overflow-hidden">
+            <ProfilePage onClose={() => setShowProfile(false)} />
+          </div>
+        </div>
       )}
     </aside>
   );

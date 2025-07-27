@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useRef, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, Palette, Send, Sparkles, Minimize2, Plus, Zap, User, MessageSquare, ChevronDown } from "lucide-react";
@@ -18,6 +19,8 @@ interface AISidebarProps {
 }
 
 export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarProps) {
+  const { requireAuth } = useAuth();
+
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: "ai", 
@@ -47,6 +50,7 @@ const modelOptions = [
   }, [messages]);
 
   const handleSend = (e: FormEvent) => {
+    if (!requireAuth()) return;
     e.preventDefault();
     const text = input.trim();
     if (!text) return;
