@@ -16,11 +16,13 @@ import {
   Trash2,
   Sparkles,
   Crown,
-  Zap
+  Zap,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
 import ProfilePage from './ProfilePage';
+import { useCanvas } from '@/contexts/CanvasProvider';
 
 interface CanvasItem {
   id: string;
@@ -30,6 +32,7 @@ interface CanvasItem {
 }
 
 const EnhancedSidebar = () => {
+  const { setActiveCanvasId, loadCanvas } = useCanvas();
   // Helper to create a new canvas for the current user
   const createCanvas = async () => {
     if (!user) {
@@ -43,13 +46,14 @@ const EnhancedSidebar = () => {
       minute: '2-digit',
       hour12: true,
     });
-    const { error } = await supabase.from('canvases').insert({
-      user_id: user.id,
-      title,
-    });
+    const { data, error } = await supabase.from('canvases')
+      .insert({ user_id: user.id, title })
+      .select('id')
+      .single();
     if (error) {
       console.error('Create canvas error', error);
     } else {
+      setActiveCanvasId(data.id);
       refresh();
     }
   };
@@ -164,6 +168,7 @@ const EnhancedSidebar = () => {
                 width={28} 
                 height={28}
                 className="rounded-md"
+                style={{ width: 'auto', height: 'auto' }}
               />
             </div>
           </div>
@@ -221,6 +226,7 @@ const EnhancedSidebar = () => {
                   width={28} 
                   height={28}
                   className="rounded-md"
+                  style={{ width: 'auto', height: 'auto' }}
                 />
               </div>
               <div>
@@ -253,11 +259,11 @@ const EnhancedSidebar = () => {
             </Button>
           </div>
 
-          {/* Canvas History */}
-          <div className="flex-1 overflow-auto px-4">
-            {Object.entries(canvasHistory)
-              .filter(([, items]) => items.length > 0)
-              .map(([period, items]) => (
+        {/* Canvas History */}
+        <div className="flex-1 overflow-auto px-4">
+          {Object.entries(canvasHistory)
+            .filter(([, items]) => items.length > 0)
+            .map(([period, items]) => (
               <div key={period} className="mb-6">
                 <h3 className="text-xs font-semibold text-sidebar-foreground/70 tracking-wider mb-3">
                   {period}
@@ -268,6 +274,15 @@ const EnhancedSidebar = () => {
                       <Button
                         variant="ghost"
                         className="w-full text-gray-700 justify-start h-9 text-sm font-medium hover:bg-gradient-to-r hover:from-sidebar-accent hover:to-sidebar-accent/50 hover:text-sidebar-accent-foreground pr-8 rounded-lg transition-all duration-200 hover:shadow-md"
+                        onClick={async () => {
+                          try {
+                            setActiveCanvasId(item.id);
+                            await loadCanvas(item.id);
+                          } catch (error) {
+                            console.error('Failed to load canvas:', error);
+                            // You could show a toast notification here
+                          }
+                        }}
                       >
                         <span className="flex-1 text-left truncate">{item.title}</span>
                       </Button>
@@ -290,45 +305,38 @@ const EnhancedSidebar = () => {
                 </div>
               </div>
             ))}
-          </div>
+        </div>
 
-          {/* Upgrade Card */}
-          {showUpgradeCard && (
-            <div className="px-4 pb-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-pink-500 text-white shadow-lg transform transition-all duration-300 hover:scale-[1.02] relative">
-                <button 
-                  onClick={async () => {
-                    if (!requireAuth()) return;
-                    const title = new Date().toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true });
-                    const { data, error } = await supabase.from('canvases').insert({ title, user_id: user!.id, is_pinned: false });
-                    if (error) console.error('Create canvas error', error);
-                    else {
-                      // optionally redirect to editor page with new canvas id
-                    }
-                    refresh();
-                  }} 
-                  className="absolute top-1 right-1 text-white hover:text-red-400 transition-all duration-200"
-                >
-                  x
-                </button>
-                <div className="flex items-center gap-2 mb-2">
-                  <Crown className="h-4 w-4" />
-                  <span className="font-bold text-sm">Upgrade to Pro</span>
-                </div>
-                <p className="text-xs opacity-90 mb-2">
-                  Unlimited canvases & AI magic ✨
-                </p>
-                <Button 
-                  size="sm" 
-                  className="w-full h-7 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs backdrop-blur-sm border border-white/30 transition-all duration-200"
-                >
-                  <Zap className="h-3 w-3 mr-1" />
-                  Upgrade Now
-                </Button>
+        {/* Upgrade Card */}
+        {showUpgradeCard && (
+          <div className="px-4 pb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-pink-500 text-white shadow-lg transform transition-all duration-300 hover:scale-[1.02] relative">
+              <button 
+                onClick={() => setShowUpgradeCard(false)} 
+                className="absolute top-1 right-1 text-white hover:text-red-400 transition-all duration-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-2 mb-2">
+                <Crown className="h-4 w-4" />
+                <span className="font-bold text-sm">Upgrade to Pro</span>
               </div>
+              <p className="text-xs opacity-90 mb-2">
+                Unlimited canvases & AI magic ✨
+              </p>
+              <Button 
+                size="sm" 
+                className="w-full h-7 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs backdrop-blur-sm border border-white/30 transition-all duration-200"
+              >
+                <Zap className="h-3 w-3 mr-1" />
+                Upgrade Now
+              </Button>
             </div>
-          )}
+          </div>
+        )}
 
+
+                
           {/* Profile Section */}
           <div className="border-t border-sidebar-border p-4">
             {user ? (

@@ -3,12 +3,14 @@
 import { useRef, useState } from "react";
 import { Tldraw, Editor } from "@tldraw/tldraw";
 import EnhancedSidebar from "@/components/EnhancedSidebar";
+import { useCanvas } from "@/contexts/CanvasProvider";
 import AISidebar from "@/components/AISidebar";
 import "@tldraw/tldraw/tldraw.css";
-import { saveCanvas } from "@/lib/saveCanvas";
+
 import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
+  const { registerEditor, saveActiveCanvas } = useCanvas();
   /* ---- sidebar + chat state ---- */
   const editorRef = useRef<Editor | null>(null);
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
@@ -23,8 +25,9 @@ export default function Dashboard() {
         <Tldraw
             persistenceKey="dashboard"
             className="w-full h-5/6 mx-auto"
-            onMount={(editor) => {
-              editorRef.current = editor;
+            onMount={(e) => {
+              editorRef.current = e;
+              registerEditor(e);
             }}
           />
           {/* Save button */}
@@ -33,7 +36,7 @@ export default function Dashboard() {
             onClick={async () => {
               if (!editorRef.current) return;
               try {
-                await saveCanvas(editorRef.current);
+                await saveActiveCanvas();
                 alert("Canvas saved to Supabase ✔️");
               } catch (err) {
                 console.error(err);

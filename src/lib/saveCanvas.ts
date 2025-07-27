@@ -6,7 +6,7 @@ import { Editor } from '@tldraw/tldraw'
  * The canvas is stored in the `canvases` table as JSONB.
  * Requires that the user is authenticated.
  */
-export async function saveCanvas(editor: Editor) {
+export async function saveCanvas(editor: Editor, canvasId: string) {
   const userRes = await supabase.auth.getUser()
   const uid = userRes.data.user?.id
   if (!uid) {
@@ -16,10 +16,9 @@ export async function saveCanvas(editor: Editor) {
   // Get every record from the tldraw store and stringify it
   const json = JSON.stringify(editor.store.allRecords())
 
-  const { error } = await supabase.from('canvases').insert({
-    user_id: uid,
-    data: json,
-  })
+  const { error } = await supabase.from('canvases')
+    .update({ data: json, updated_at: new Date().toISOString() })
+    .eq('id', canvasId)
 
   if (error) {
     console.error('Failed to save canvas', error)

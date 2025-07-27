@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthProvider";
+import { CanvasProvider } from "@/contexts/CanvasProvider";
 import { LoginModal } from "@/components/LoginModal";
 
 export const metadata: Metadata = {
@@ -19,9 +20,11 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${GeistSans.variable} ${GeistMono.variable} antialiased font-sans`}>
         <AuthProvider>
-          {children}
-          <LoginModal />
-        </AuthProvider>
+            <CanvasProvider>
+              {children}
+              <LoginModal />
+            </CanvasProvider>
+          </AuthProvider>
       </body>
     </html>
   );
