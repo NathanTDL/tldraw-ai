@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, Palette, Send, Sparkles, Minimize2, Plus, Zap, User, MessageSquare, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   role: "user" | "ai";
@@ -30,76 +32,129 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
     }
   ]);
   
-  // Method to get canvas snapshot
+  // Method to get canvas snapshot using proper tldraw API
   const getCanvasSnapshot = () => {
     if (!editorRef.current) return null;
-    return editorRef.current.store.getSnapshot();
+    // Use the proper method to get all shapes
+    return editorRef.current.getCurrentPageShapes();
   };
-
-  // Method to parse shapes from snapshot
-  const parseShapes = (snapshot: any) => {
-    if (!snapshot || !snapshot.store) return [];
+// Method to extract AI-friendly canvas context
+  const extractCanvasContext = () => {
+    const shapes = getCanvasSnapshot();
+    if (!shapes || !Array.isArray(shapes)) return [];
     
-    const shapes = [];
-    const records = snapshot.store;
-    
-    // Extract shape records from the store
-    for (const [id, record] of Object.entries(records)) {
-      if (typeof record === 'object' && record && (record as any).typeName === 'shape') {
-        const shape = record as any;
-        shapes.push({
+    // Extract just the useful parts following the clean structure
+    const aiContext = shapes
+      .map((shape: any) => {
+        // Enhanced text extraction with comprehensive debugging
+        let extractedText = '';
+        
+        // Debug: Log the entire shape structure to understand tldraw's format
+        console.log(`\n=== Shape ${shape.id} (${shape.type}) ===`);
+        console.log('Full shape object:', shape);
+        console.log('Props:', shape.props);
+        
+        // Extract text content from tldraw's richText structure
+        if (shape.props) {
+          // Handle tldraw's richText format: props.richText.content[].content[].text
+          if (shape.props.richText && shape.props.richText.content) {
+            console.log('Found richText structure:', shape.props.richText);
+            
+            // Navigate through the nested content structure
+            const richTextContent = shape.props.richText.content;
+            if (Array.isArray(richTextContent) && richTextContent.length > 0) {
+              // Check each paragraph in the richText
+              for (const paragraph of richTextContent) {
+                if (paragraph.content && Array.isArray(paragraph.content)) {
+                  // Check each text segment in the paragraph
+                  for (const textSegment of paragraph.content) {
+                    if (textSegment.text) {
+                      extractedText += textSegment.text;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          // Fallback: Check other possible text property locations
+          if (!extractedText) {
+            const possibleTextProps = [
+              shape.props.text,
+              shape.props.content,
+              shape.props.value,
+              shape.props.label
+            ];
+            
+            possibleTextProps.forEach((textProp) => {
+              if (textProp && typeof textProp === 'string' && !extractedText) {
+                extractedText = textProp;
+              }
+            });
+          }
+        }
+        
+        console.log(`Final extracted text: "${extractedText}"`);
+        console.log('===================\n');
+        
+        return {
           id: shape.id,
           type: shape.type,
-          x: shape.x,
-          y: shape.y,
-          rotation: shape.rotation,
-          props: shape.props,
-          // Extract text content if available
-          text: shape.props?.text || '',
-          // For geometric shapes, include dimensions
-          width: shape.props?.w,
-          height: shape.props?.h,
-        });
-      }
-    }
+          text: extractedText,
+          x: Math.round(shape.x || 0),
+          y: Math.round(shape.y || 0),
+          // Additional useful properties
+          width: Math.round(shape.props?.w || 0),
+          height: Math.round(shape.props?.h || 0)
+        };
+      });
     
-    return shapes;
+    return aiContext;
   };
   
-  // Method to transform canvas data to natural language
-  const transformToNaturalLanguage = (shapes: any[]) => {
-    if (shapes.length === 0) {
+  // Method to create human-readable summary
+  const createCanvasSummary = (aiContext: any[]) => {
+    if (aiContext.length === 0) {
       return "The canvas is currently empty.";
     }
     
-    let description = `The canvas contains ${shapes.length} element(s):\n\n`;
-    
-    shapes.forEach((shape, index) => {
-      description += `${index + 1}. ${shape.type} `;
+    const summary = aiContext.map((shape, i) => {
+      let description = `Item ${i + 1}: A ${shape.type}`;
+      
       if (shape.text) {
-        description += `with text: "${shape.text}" `;
+        description += ` that says "${shape.text}"`;
       }
-      description += `at position (${Math.round(shape.x)}, ${Math.round(shape.y)})`;
+      
+      description += ` at position (${shape.x}, ${shape.y})`;
+      
       if (shape.width && shape.height) {
-        description += ` with dimensions ${Math.round(shape.width)}x${Math.round(shape.height)}`;
+        description += ` with dimensions ${shape.width}x${shape.height}`;
       }
-      description += "\n";
-    });
+      
+      return description;
+    }).join('\n');
     
-    return description;
+    return `Canvas contents (${aiContext.length} items):\n${summary}`;
   };
   
   // Method to get canvas context for AI
   const getCanvasContext = () => {
-    const snapshot = getCanvasSnapshot();
-    const shapes = parseShapes(snapshot);
-    const naturalLanguageDescription = transformToNaturalLanguage(shapes);
+    // Extract AI-friendly canvas context using the clean structure
+    const aiContext = extractCanvasContext();
+    
+    // Create human-readable summary for AI
+    const canvasSummary = createCanvasSummary(aiContext);
+    
+    // Debug: Log the clean extracted data
+    console.log('AI Context:', aiContext);
+    console.log('Canvas Summary:', canvasSummary);
     
     return {
-      snapshot,
-      shapes,
-      description: naturalLanguageDescription,
-      shapeCount: shapes.length
+      aiContext,
+      description: canvasSummary,
+      shapeCount: aiContext.length,
+      // Also provide structured JSON for potential future use
+      structuredContext: aiContext
     };
   };
   const [input, setInput] = useState("");
@@ -351,8 +406,32 @@ const handleSend = async (e: FormEvent) => {
                 ? 'bg-slate-600 dark:bg-slate-500 text-white rounded-tr-md' 
                 : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60 rounded-tl-md backdrop-blur-sm'
             )}>
-              <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                {m.content}
+              <div className="text-sm leading-relaxed">
+                {m.role === 'ai' ? (
+                  <div className="prose prose-sm prose-slate dark:prose-invert max-w-none">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        // Custom styling for markdown elements
+                        p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                        ul: ({children}) => <ul className="mb-2 last:mb-0 ml-4 list-disc">{children}</ul>,
+                        ol: ({children}) => <ol className="mb-2 last:mb-0 ml-4 list-decimal">{children}</ol>,
+                        li: ({children}) => <li className="mb-1">{children}</li>,
+                        strong: ({children}) => <strong className="font-semibold text-slate-900 dark:text-slate-100">{children}</strong>,
+                        em: ({children}) => <em className="italic">{children}</em>,
+                        code: ({children}) => <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded text-xs">{children}</code>,
+                        blockquote: ({children}) => <blockquote className="border-l-4 border-slate-300 dark:border-slate-600 pl-4 italic">{children}</blockquote>,
+                        h1: ({children}) => <h1 className="text-base font-bold mb-2">{children}</h1>,
+                        h2: ({children}) => <h2 className="text-sm font-bold mb-2">{children}</h2>,
+                        h3: ({children}) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                )}
               </div>
             </div>
           </div>
