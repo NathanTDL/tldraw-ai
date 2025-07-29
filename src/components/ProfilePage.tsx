@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   User, 
   Settings, 
@@ -23,7 +24,9 @@ import {
   Edit3,
   Check,
   X,
-  ChevronLeft
+  ChevronLeft,
+  Camera,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
