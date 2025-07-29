@@ -251,7 +251,7 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
         
         if (!error && data) {
           console.log('✅ Last canvas found in database, loading...');
-          setActiveCanvasId(lastCanvasId);
+          setActiveCanvasIdWithPersistence(lastCanvasId);
           await loadCanvas(lastCanvasId);
           setIsInitialized(true);
           return;
@@ -267,12 +267,11 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
     console.log('📝 Creating new canvas as fallback...');
     const newCanvasId = await createNewCanvas();
     if (newCanvasId) {
-      setActiveCanvasId(newCanvasId);
-      saveLastCanvasId(newCanvasId);
+      setActiveCanvasIdWithPersistence(newCanvasId);
     }
     
     setIsInitialized(true);
-  }, [isInitialized, createNewCanvas]);
+  }, [isInitialized, createNewCanvas, setActiveCanvasIdWithPersistence]);
   
   useEffect(() => {
     // Only initialize when editor is available

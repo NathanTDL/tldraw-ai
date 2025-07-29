@@ -310,12 +310,12 @@ const handleSend = async (e: FormEvent) => {
                   setInput(action.action);
                   inputRef.current?.focus();
                 }}
-                className="h-auto p-3 justify-start text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 rounded-xl group"
+                className="h-auto p-3 justify-start text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200 rounded-xl group whitespace-normal"
               >
-                <action.icon className="w-4 h-4 mr-3 text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors" />
-                <div>
+                <action.icon className="w-4 h-4 mr-3 text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+                <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{action.label}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{action.action}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 break-words">{action.action}</div>
                 </div>
               </Button>
             ))}
