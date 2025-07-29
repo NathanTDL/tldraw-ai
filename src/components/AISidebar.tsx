@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthProvider";
+import { useCanvas } from "@/contexts/CanvasProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, Palette, Send, Sparkles, Minimize2, Plus, Zap, User, MessageSquare, ChevronDown } from "lucide-react";
@@ -20,6 +21,7 @@ interface AISidebarProps {
 
 export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarProps) {
   const { requireAuth } = useAuth();
+  const { editorRef, registerEditor } = useCanvas();
 
   const [messages, setMessages] = useState<Message[]>([
     { 
@@ -27,15 +29,87 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
       content: "Hello! I'm your Canvas Assistant. How can I help you with your creative projects today?"
     }
   ]);
+  
+  // Method to get canvas snapshot
+  const getCanvasSnapshot = () => {
+    if (!editorRef.current) return null;
+    return editorRef.current.store.getSnapshot();
+  };
+
+  // Method to parse shapes from snapshot
+  const parseShapes = (snapshot: any) => {
+    if (!snapshot || !snapshot.store) return [];
+    
+    const shapes = [];
+    const records = snapshot.store;
+    
+    // Extract shape records from the store
+    for (const [id, record] of Object.entries(records)) {
+      if (typeof record === 'object' && record && (record as any).typeName === 'shape') {
+        const shape = record as any;
+        shapes.push({
+          id: shape.id,
+          type: shape.type,
+          x: shape.x,
+          y: shape.y,
+          rotation: shape.rotation,
+          props: shape.props,
+          // Extract text content if available
+          text: shape.props?.text || '',
+          // For geometric shapes, include dimensions
+          width: shape.props?.w,
+          height: shape.props?.h,
+        });
+      }
+    }
+    
+    return shapes;
+  };
+  
+  // Method to transform canvas data to natural language
+  const transformToNaturalLanguage = (shapes: any[]) => {
+    if (shapes.length === 0) {
+      return "The canvas is currently empty.";
+    }
+    
+    let description = `The canvas contains ${shapes.length} element(s):\n\n`;
+    
+    shapes.forEach((shape, index) => {
+      description += `${index + 1}. ${shape.type} `;
+      if (shape.text) {
+        description += `with text: "${shape.text}" `;
+      }
+      description += `at position (${Math.round(shape.x)}, ${Math.round(shape.y)})`;
+      if (shape.width && shape.height) {
+        description += ` with dimensions ${Math.round(shape.width)}x${Math.round(shape.height)}`;
+      }
+      description += "\n";
+    });
+    
+    return description;
+  };
+  
+  // Method to get canvas context for AI
+  const getCanvasContext = () => {
+    const snapshot = getCanvasSnapshot();
+    const shapes = parseShapes(snapshot);
+    const naturalLanguageDescription = transformToNaturalLanguage(shapes);
+    
+    return {
+      snapshot,
+      shapes,
+      description: naturalLanguageDescription,
+      shapeCount: shapes.length
+    };
+  };
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-4");
+  const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp");
 const [isModelOpen, setIsModelOpen] = useState(false);
 
 const modelOptions = [
-  { value: "gpt-4", label: "GPT-4" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
-  { value: "claude-3", label: "Claude 3" },
-  { value: "gemini-pro", label: "Gemini Pro" }
+  { value: "gemini-2.0-flash-exp", label: "Gemini Flash (Active)" },
+  { value: "gpt-4", label: "GPT-4 (Coming Soon)" },
+  { value: "claude-3", label: "Claude 3 (Coming Soon)" }
 ];
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,44 +122,111 @@ const modelOptions = [
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Enter to send message
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && input.trim()) {
+        e.preventDefault();
+        const form = document.getElementById('ai-chat-form') as HTMLFormElement;
+        if (form) {
+          form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+      }
+      
+      // Escape to focus on input
+      if (e.key === 'Escape' && !isCollapsed) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [input, isCollapsed]);
 
-  const handleSend = (e: FormEvent) => {
+const handleSend = async (e: FormEvent) => {
     if (!requireAuth()) return;
     e.preventDefault();
-    const text = input.trim();
-    if (!text) return;
+    const userMessage = input.trim();
+    if (!userMessage) return;
     
     setMessages((prev) => [...prev, { 
       role: "user", 
-      content: text
+      content: userMessage
     }]);
     setInput("");
     setIsTyping(true);
     
-    // Simulate AI response with more realistic delay
-    setTimeout(() => {
-      const responses = [
-        "That's a great idea! I can help you create something amazing on your canvas.",
-        "Interesting! Let me suggest some creative approaches for your project.",
-        "I love where this is going! Here are some ways we can enhance your canvas.",
-        "Perfect! Let's transform your vision into something extraordinary.",
-        "Got it! I'll help you bring structure and creativity to your canvas."
-      ];
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+    try {
+      // Get the current canvas context
+      const context = getCanvasContext();
       
+      // Get conversation history (last 5 messages for context)
+      const conversationHistory = messages.slice(-5);
+      
+      // Call our API route
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          context: context.description,
+          conversationHistory: conversationHistory
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessages((prev) => [...prev, { 
+          role: "ai", 
+          content: data.message
+        }]);
+      } else {
+        // Fallback response if API fails
+        setMessages((prev) => [...prev, { 
+          role: "ai", 
+          content: data.message || "I'm having trouble right now, but I'm here to help with your canvas!"
+        }]);
+      }
+    } catch (error) {
+      console.error('Chat error:', error);
+      // Fallback response for network errors
       setMessages((prev) => [...prev, { 
         role: "ai", 
-        content: randomResponse
+        content: "I'm having connection issues, but I can see your canvas! Let me try to help based on what's currently displayed."
       }]);
+    } finally {
       setIsTyping(false);
-    }, 1200 + Math.random() * 800);
+    }
   };
 
-  const quickActions = [
-    { icon: Sparkles, label: "Brainstorm ideas", action: "Help me brainstorm creative ideas" },
-    { icon: Zap, label: "Quick template", action: "Show me quick canvas templates" },
-    { icon: Plus, label: "Add elements", action: "What elements should I add to my canvas?" }
-  ];
+  // Dynamic quick actions based on canvas state
+  const getQuickActions = () => {
+    const context = getCanvasContext();
+    
+    if (context.shapeCount === 0) {
+      // Canvas is empty
+      return [
+        { icon: Sparkles, label: "Get started", action: "How should I start organizing my ideas on this canvas?" },
+        { icon: Zap, label: "Templates", action: "Show me some canvas templates to get started" },
+        { icon: Plus, label: "First steps", action: "What's the best way to begin a new project on this canvas?" }
+      ];
+    } else {
+      // Canvas has content
+      return [
+        { icon: Sparkles, label: "Analyze canvas", action: "What do you think of my current canvas layout?" },
+        { icon: Zap, label: "Improve", action: "How can I improve and organize what's on my canvas?" },
+        { icon: Plus, label: "Next steps", action: "What should I add next to complete this project?" }
+      ];
+    }
+  };
+  
+  const quickActions = getQuickActions();
 
   if (isCollapsed) {
     return (
@@ -237,7 +378,7 @@ const modelOptions = [
       </div>
 
       {/* Enhanced Input Form */}
-      <form onSubmit={handleSend} className="p-4 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl">
+      <form id="ai-chat-form" onSubmit={handleSend} className="p-4 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl">
         <div className="flex gap-3 items-end">
           <div className="flex-1 relative">
             <textarea

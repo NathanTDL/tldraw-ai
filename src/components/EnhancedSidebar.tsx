@@ -32,7 +32,7 @@ interface CanvasItem {
 }
 
 const EnhancedSidebar = () => {
-  const { activeCanvasId, setActiveCanvasId, loadCanvas, forceSaveCurrentCanvas } = useCanvas();
+  const { activeCanvasId, setActiveCanvasId, loadCanvas, saveCanvasById } = useCanvas();
   // Helper to create a new canvas for the current user
   const createCanvas = async () => {
     if (!user) {
@@ -281,9 +281,12 @@ className={`w-full justify-start h-9 text-sm font-medium pr-8 rounded-lg transit
                             // Don't switch if already active
                             if (item.id === activeCanvasId) return;
                             
-                            // Save current canvas before switching
-                            if (activeCanvasId) {
-                              await forceSaveCurrentCanvas();
+                            // Capture the current canvas ID before switching
+                            const oldCanvasId = activeCanvasId;
+                            
+                            // Save current canvas before switching (force save even if unchanged)
+                            if (oldCanvasId) {
+                              await saveCanvasById(oldCanvasId, true);
                             }
                             
                             // Switch to new canvas

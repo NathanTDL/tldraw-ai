@@ -9,10 +9,13 @@ interface CanvasContextValue {
   setActiveCanvasId: (id: string | null) => void;
   registerEditor: (editor: Editor) => void;
   saveActiveCanvas: () => Promise<void>;
+  forceSaveCurrentCanvas: (forceEvenIfUnchanged?: boolean) => Promise<void>;
+  saveCanvasById: (canvasId: string, forceEvenIfUnchanged?: boolean) => Promise<void>;
   loadCanvas: (id: string) => Promise<void>;
+  createNewCanvas: () => Promise<string | null>;
   isSaving: boolean;
   lastSaved: Date | null;
-  forceSaveCurrentCanvas: () => Promise<void>;
+  editorRef: React.MutableRefObject<Editor | null>;
 }
 
 const CanvasContext = createContext<CanvasContextValue | null>(null);
@@ -21,119 +24,64 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const editorRef = useRef<Editor | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSnapshotRef = useRef<string | null>(null);
-
-  const registerEditor = useCallback((editor: Editor) => {
-    editorRef.current = editor;
-    
-    // Set up automatic saving when canvas changes
-    const handleStoreChange = () => {
-      if (!activeCanvasId || !editorRef.current) return;
-      
-      // Debounce saving - wait 2 seconds after last change
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      
-      saveTimeoutRef.current = setTimeout(async () => {
-        await autoSaveCanvas();
-      }, 2000);
-    };
-    
-    // Listen to store changes
-    const unsubscribe = editor.store.listen(handleStoreChange, { scope: 'document' });
-    
-    // Clean up listener when editor changes
-    return () => {
-      unsubscribe();
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [activeCanvasId]);
-
-  // Automatic saving function (debounced)
-  const autoSaveCanvas = useCallback(async () => {
-    if (!activeCanvasId || !editorRef.current || isSaving) return;
-    
-    try {
-      // Get current snapshot
-      const snapshot = getSnapshot(editorRef.current.store);
-      const json = JSON.stringify(snapshot);
-      
-      // Check if content has actually changed
-      if (lastSnapshotRef.current === json) {
-        console.log("Canvas content unchanged, skipping save");
-        return;
-      }
-      
-      console.log("Auto-saving canvas...");
-      setIsSaving(true);
-      
-      const { error } = await supabase
-        .from("canvases")
-        .update({ 
-          data: json, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", activeCanvasId);
-      
-      if (error) {
-        console.error("Auto-save error:", error);
-      } else {
-        lastSnapshotRef.current = json;
-        setLastSaved(new Date());
-        console.log("Canvas auto-saved successfully");
-      }
-    } catch (error) {
-      console.error("Auto-save error:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [activeCanvasId, isSaving]);
   
-  // Manual save function
-  const saveActiveCanvas = async () => {
-    if (!activeCanvasId || !editorRef.current) {
-      console.log("Cannot save: no active canvas or editor");
-      return;
-    }
-    
+  // Generate a proper UUID
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+  
+  // localStorage helpers
+  const saveLastCanvasId = (canvasId: string) => {
     try {
-      console.log("Manually saving canvas...");
-      setIsSaving(true);
-      
-      // Cancel any pending auto-save
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      
-      const snapshot = getSnapshot(editorRef.current.store);
-      const json = JSON.stringify(snapshot);
-      
-      const { error } = await supabase
-        .from("canvases")
-        .update({ 
-          data: json, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq("id", activeCanvasId);
-      
-      if (error) {
-        console.error("Manual save error:", error);
-        throw error;
-      } else {
-        lastSnapshotRef.current = json;
-        setLastSaved(new Date());
-        console.log("Canvas saved manually");
-      }
+      localStorage.setItem('tldrawai-last-canvas-id', canvasId);
+      console.log('💾 Saved last canvas ID to localStorage:', canvasId);
     } catch (error) {
-      console.error("Manual save error:", error);
-      throw error;
-    } finally {
-      setIsSaving(false);
+      console.error('Error saving last canvas ID:', error);
+    }
+  };
+  
+  const getLastCanvasId = (): string | null => {
+    try {
+      const lastCanvasId = localStorage.getItem('tldrawai-last-canvas-id');
+      console.log('📂 Retrieved last canvas ID from localStorage:', lastCanvasId);
+      return lastCanvasId;
+    } catch (error) {
+      console.error('Error retrieving last canvas ID:', error);
+      return null;
+    }
+  };
+  
+  // Enhanced setActiveCanvasId that persists to localStorage
+  const setActiveCanvasIdWithPersistence = useCallback((id: string | null) => {
+    setActiveCanvasId(id);
+    if (id) {
+      saveLastCanvasId(id);
+    }
+  }, []);
+
+  const clearCanvasContent = () => {
+    try {
+      // Instead of clearing the entire store, just select all and delete
+      editorRef.current?.selectAll();
+      editorRef.current?.deleteShapes(editorRef.current.getSelectedShapeIds());
+      editorRef.current?.selectNone();
+      console.log("Canvas content cleared safely");
+    } catch (clearError) {
+      console.error("Error clearing canvas content:", clearError);
+      // Fallback: try to reset to a minimal state
+      try {
+        editorRef.current?.selectNone();
+      } catch (fallbackError) {
+        console.error("Fallback clear also failed:", fallbackError);
+      }
     }
   };
 
@@ -225,33 +173,296 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const clearCanvasContent = () => {
+  // Create a new canvas (only when explicitly requested)
+  const createNewCanvas = useCallback(async (): Promise<string | null> => {
     try {
-      // Instead of clearing the entire store, just select all and delete
-      editorRef.current?.selectAll();
-      editorRef.current?.deleteShapes(editorRef.current.getSelectedShapeIds());
-      editorRef.current?.selectNone();
-      console.log("Canvas content cleared safely");
-    } catch (clearError) {
-      console.error("Error clearing canvas content:", clearError);
-      // Fallback: try to reset to a minimal state
-      try {
-        editorRef.current?.selectNone();
-      } catch (fallbackError) {
-        console.error("Fallback clear also failed:", fallbackError);
+      console.log('🎨 Creating new canvas...');
+      
+      // Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.log('No authenticated user, creating temporary canvas ID');
+        // Create a temporary canvas ID for local use
+        const tempCanvasId = generateUUID();
+        console.log('✅ Created temporary canvas ID:', tempCanvasId);
+        return tempCanvasId;
+      }
+      
+      // Generate a proper UUID for the canvas
+      const canvasId = generateUUID();
+      
+      // Create an empty canvas in the database with all required fields
+      const { data, error } = await supabase
+        .from('canvases')
+        .insert({
+          id: canvasId,
+          user_id: user.id,
+          title: 'Untitled Canvas',
+          data: {}, // Empty canvas data as object
+          is_pinned: false
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error creating new canvas:', error);
+        // Fallback to local canvas ID
+        const tempCanvasId = generateUUID();
+        console.log('✅ Created temporary canvas ID due to DB error:', tempCanvasId);
+        return tempCanvasId;
+      }
+      
+      console.log('✅ New canvas created with ID:', canvasId);
+      return canvasId;
+      
+    } catch (error) {
+      console.error('Error in createNewCanvas:', error);
+      // Fallback to local canvas ID
+      const tempCanvasId = generateUUID();
+      console.log('✅ Created temporary canvas ID due to error:', tempCanvasId);
+      return tempCanvasId;
+    }
+  }, []);
+
+  // Initialize with last opened canvas on app startup
+  const initializeCanvas = useCallback(async () => {
+    if (isInitialized || !editorRef.current) return;
+    
+    console.log('🚀 Initializing canvas provider...');
+    
+    // Get last opened canvas from localStorage
+    const lastCanvasId = getLastCanvasId();
+    
+    if (lastCanvasId) {
+      console.log('📖 Attempting to restore last canvas:', lastCanvasId);
+      
+      // Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        // Verify canvas exists in database
+        const { data, error } = await supabase
+          .from('canvases')
+          .select('id')
+          .eq('id', lastCanvasId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!error && data) {
+          console.log('✅ Last canvas found in database, loading...');
+          setActiveCanvasId(lastCanvasId);
+          await loadCanvas(lastCanvasId);
+          setIsInitialized(true);
+          return;
+        } else {
+          console.log('❌ Last canvas not found or not accessible, creating new one');
+        }
+      } else {
+        console.log('👤 No authenticated user, will create temporary canvas');
       }
     }
-  };
+    
+    // Fallback: create a new canvas if no last canvas or it doesn't exist
+    console.log('📝 Creating new canvas as fallback...');
+    const newCanvasId = await createNewCanvas();
+    if (newCanvasId) {
+      setActiveCanvasId(newCanvasId);
+      saveLastCanvasId(newCanvasId);
+    }
+    
+    setIsInitialized(true);
+  }, [isInitialized, createNewCanvas]);
+  
+  useEffect(() => {
+    // Only initialize when editor is available
+    if (editorRef.current && !isInitialized) {
+      initializeCanvas();
+    }
+  }, [editorRef.current, isInitialized, initializeCanvas]);
 
-  // Force save current canvas - used when switching between canvases
-  const forceSaveCurrentCanvas = async () => {
+  const registerEditor = useCallback((editor: Editor) => {
+    editorRef.current = editor;
+    console.log('✅ Canvas editor registered');
+  }, []);
+
+  // Force save function (used for both auto-save and canvas switching)
+  const forceSaveCurrentCanvas = useCallback(async (forceEvenIfUnchanged = false) => {
     if (!activeCanvasId || !editorRef.current) {
       console.log("Cannot force save: no active canvas or editor");
       return;
     }
     
+    // Skip if already saving to prevent concurrent saves
+    if (isSaving) {
+      console.log("Save already in progress, skipping");
+      return;
+    }
+    
     try {
-      console.log("Force saving current canvas before switching...");
+      // Cancel any pending auto-save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      const snapshot = getSnapshot(editorRef.current.store);
+      const json = JSON.stringify(snapshot);
+      
+      // Check if content has actually changed (unless forcing)
+      if (!forceEvenIfUnchanged && lastSnapshotRef.current === json) {
+        console.log("Canvas content unchanged, skipping save");
+        return;
+      }
+      
+      // Check if user is authenticated before saving
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log("No authenticated user, skipping force save");
+        // Still update local reference to avoid repeated attempts
+        lastSnapshotRef.current = json;
+        return;
+      }
+      
+      console.log(forceEvenIfUnchanged ? "Force saving canvas for switch..." : "Auto-saving canvas changes...");
+      setIsSaving(true);
+      
+      const { error } = await supabase
+        .from("canvases")
+        .update({ 
+          data: snapshot // Save as object, not string
+        })
+        .eq("id", activeCanvasId);
+      
+      if (error) {
+        console.error("Force save error:", error);
+        throw error;
+      } else {
+        lastSnapshotRef.current = json;
+        setLastSaved(new Date());
+        console.log("Canvas saved successfully");
+      }
+    } catch (error) {
+      console.error("Force save error:", error);
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeCanvasId, isSaving]);
+
+  // Set up auto-save when canvas is ready
+  useEffect(() => {
+    if (!editorRef.current || !activeCanvasId || !isInitialized) {
+      return; // Wait until everything is ready
+    }
+    
+    console.log('🎯 Setting up auto-save for canvas:', activeCanvasId);
+    
+    // Set up automatic saving when canvas changes
+    const handleStoreChange = (entry: any) => {
+      if (!editorRef.current || !activeCanvasId || !isInitialized) {
+        return;
+      }
+      
+      // Only trigger on meaningful changes (not hover, selection, etc.)
+      if (entry.changes) {
+        const hasShapeChanges = Object.keys(entry.changes.added).some(key => key.startsWith('shape:')) ||
+                               Object.keys(entry.changes.updated).some(key => key.startsWith('shape:')) ||
+                               Object.keys(entry.changes.removed).some(key => key.startsWith('shape:'));
+        
+        if (!hasShapeChanges) {
+          return; // Skip non-shape changes like viewport, selection, etc.
+        }
+      }
+      
+      console.log('🎯 Canvas content changed, scheduling auto-save...');
+      
+      // 300ms debounce for very responsive saving
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      saveTimeoutRef.current = setTimeout(async () => {
+        await forceSaveCurrentCanvas();
+      }, 300); // 300ms debounce using forceSave
+    };
+    
+    // Listen to document changes only (shapes, arrows, text, etc.)
+    const unsubscribe = editorRef.current.store.listen(handleStoreChange, {
+      scope: 'document'
+    });
+    
+    console.log('✅ Auto-save listener set up with 300ms debounce');
+    
+    // Clean up listener when dependencies change
+    return () => {
+      console.log('🧹 Cleaning up auto-save listener');
+      unsubscribe();
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, [editorRef.current, activeCanvasId, isInitialized, forceSaveCurrentCanvas]);
+
+  // Automatic saving function (debounced)
+  const autoSaveCanvas = useCallback(async () => {
+    if (!activeCanvasId || !editorRef.current || isSaving) return;
+    
+    try {
+      // Get current snapshot
+      const snapshot = getSnapshot(editorRef.current.store);
+      const json = JSON.stringify(snapshot);
+      
+      // Check if content has actually changed
+      if (lastSnapshotRef.current === json) {
+        console.log("Canvas content unchanged, skipping save");
+        return;
+      }
+      
+      // Check if user is authenticated before saving
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log("No authenticated user, skipping auto-save");
+        // Still update local reference to avoid repeated attempts
+        lastSnapshotRef.current = json;
+        return;
+      }
+      
+      console.log("Auto-saving canvas...");
+      setIsSaving(true);
+      
+      const { error } = await supabase
+        .from("canvases")
+        .update({ 
+          data: snapshot // Save as object, not string
+        })
+        .eq("id", activeCanvasId);
+      
+      if (error) {
+        console.error("Auto-save error:", error);
+        // Don't update lastSnapshotRef on error so it will retry
+      } else {
+        lastSnapshotRef.current = json;
+        setLastSaved(new Date());
+        console.log("Canvas auto-saved successfully");
+      }
+    } catch (error) {
+      console.error("Auto-save error:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeCanvasId, isSaving]);
+  
+  // Manual save function
+  const saveActiveCanvas = async () => {
+    if (!activeCanvasId || !editorRef.current) {
+      console.log("Cannot save: no active canvas or editor");
+      return;
+    }
+    
+    try {
+      console.log("Manually saving canvas...");
+      setIsSaving(true);
       
       // Cancel any pending auto-save
       if (saveTimeoutRef.current) {
@@ -261,36 +472,43 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       const snapshot = getSnapshot(editorRef.current.store);
       const json = JSON.stringify(snapshot);
       
-      // Save immediately without checking if content changed
       const { error } = await supabase
         .from("canvases")
         .update({ 
-          data: json, 
-          updated_at: new Date().toISOString() 
+          data: snapshot // Save as object, not string
         })
         .eq("id", activeCanvasId);
       
       if (error) {
-        console.error("Force save error:", error);
+        console.error("Manual save error:", error);
+        throw error;
       } else {
         lastSnapshotRef.current = json;
         setLastSaved(new Date());
-        console.log("Canvas force saved successfully");
+        console.log("Canvas saved manually");
       }
     } catch (error) {
-      console.error("Force save error:", error);
+      console.error("Manual save error:", error);
+      throw error;
+    } finally {
+      setIsSaving(false);
     }
   };
 
+
+
   const value: CanvasContextValue = {
     activeCanvasId,
-    setActiveCanvasId,
+    setActiveCanvasId: setActiveCanvasIdWithPersistence,
     registerEditor,
     saveActiveCanvas,
+forceSaveCurrentCanvas,
+    saveCanvasById: forceSaveCurrentCanvas,
     loadCanvas,
+    createNewCanvas,
     isSaving,
     lastSaved,
-    forceSaveCurrentCanvas,
+    editorRef,
   };
 
   return <CanvasContext.Provider value={value}>{children}</CanvasContext.Provider>;
