@@ -10,7 +10,7 @@ import "@tldraw/tldraw/tldraw.css";
 import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
-  const { registerEditor, saveActiveCanvas } = useCanvas();
+  const { registerEditor, saveActiveCanvas, isSaving, lastSaved } = useCanvas();
   /* ---- sidebar + chat state ---- */
   const editorRef = useRef<Editor | null>(null);
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
@@ -30,22 +30,17 @@ export default function Dashboard() {
               registerEditor(e);
             }}
           />
-          {/* Save button */}
-          <Button
-            className="absolute top-4 right-4 z-50"
-            onClick={async () => {
-              if (!editorRef.current) return;
-              try {
-                await saveActiveCanvas();
-                alert("Canvas saved to Supabase ✔️");
-              } catch (err) {
-                console.error(err);
-                alert("Failed to save canvas ❌");
-              }
-            }}
-          >
-            Save
-          </Button>
+          {/* Save status and button */}
+          <div className="absolute top-4 right-4 z-50 flex flex-col gap-2">
+            {/* Save status indicator */}
+            {isSaving && (
+              <div className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm flex items-center gap-2">
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Auto-saving...
+              </div>
+            )}
+            
+          </div>
       </main>
 
       {/* ——— Right: AI chat ——— */}

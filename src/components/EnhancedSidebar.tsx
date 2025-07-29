@@ -32,7 +32,7 @@ interface CanvasItem {
 }
 
 const EnhancedSidebar = () => {
-  const { setActiveCanvasId, loadCanvas } = useCanvas();
+  const { activeCanvasId, setActiveCanvasId, loadCanvas, forceSaveCurrentCanvas } = useCanvas();
   // Helper to create a new canvas for the current user
   const createCanvas = async () => {
     if (!user) {
@@ -53,7 +53,9 @@ const EnhancedSidebar = () => {
     if (error) {
       console.error('Create canvas error', error);
     } else {
+      // Set as active and load the new empty canvas
       setActiveCanvasId(data.id);
+      await loadCanvas(data.id);
       refresh();
     }
   };
@@ -273,9 +275,18 @@ const EnhancedSidebar = () => {
                     <div key={item.id} className="relative group">
                       <Button
                         variant="ghost"
-                        className="w-full text-gray-700 justify-start h-9 text-sm font-medium hover:bg-gradient-to-r hover:from-sidebar-accent hover:to-sidebar-accent/50 hover:text-sidebar-accent-foreground pr-8 rounded-lg transition-all duration-200 hover:shadow-md"
+className={`w-full justify-start h-9 text-sm font-medium pr-8 rounded-lg transition-all duration-200 hover:shadow-md ${item.id === activeCanvasId ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 hover:bg-gradient-to-r hover:from-sidebar-accent hover:to-sidebar-accent/50 hover:text-sidebar-accent-foreground'}`}
                         onClick={async () => {
                           try {
+                            // Don't switch if already active
+                            if (item.id === activeCanvasId) return;
+                            
+                            // Save current canvas before switching
+                            if (activeCanvasId) {
+                              await forceSaveCurrentCanvas();
+                            }
+                            
+                            // Switch to new canvas
                             setActiveCanvasId(item.id);
                             await loadCanvas(item.id);
                           } catch (error) {
