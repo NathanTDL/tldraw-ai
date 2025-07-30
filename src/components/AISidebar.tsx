@@ -25,6 +25,71 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
   const { requireAuth } = useAuth();
   const { editorRef, registerEditor } = useCanvas();
 
+  // Method to add text to the canvas
+  const addTextToCanvas = ({ text, position }: { text: string; position?: { x: number; y: number } }) => {
+    if (!editorRef.current) {
+      console.error('Editor not available');
+      return;
+    }
+
+    let finalPosition = position;
+    if (!finalPosition) {
+      // Default to the center of the viewport if no position is provided
+      const viewport = editorRef.current.getViewportScreenBounds();
+      finalPosition = {
+        x: viewport.x + viewport.w / 2,
+        y: viewport.y + viewport.h / 2,
+      };
+    }
+
+    console.log('Creating text shape with:', { text, position: finalPosition });
+
+    // Use the proper tldraw v3 API to create a text shape
+    try {
+      // Create a minimal text shape with only required properties
+      editorRef.current.createShapes([
+        {
+          id: `shape:text_${Date.now()}`,
+          type: 'text',
+          x: finalPosition.x,
+          y: finalPosition.y,
+          props: {
+            richText: {
+              type: 'doc',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [
+                    {
+                      type: 'text',
+                      text: text,
+                    },
+                  ],
+                },
+              ],
+            },
+          }
+        }
+      ]);
+    } catch (error) {
+      console.error('Failed to create text shape:', error);
+      // If the above fails, try using the editor's text tool directly
+      try { 
+        editorRef.current.setCurrentTool('text');
+        editorRef.current.pointerDown(
+          finalPosition.x, 
+          finalPosition.y, 
+          { target: 'canvas', type: 'click' }
+        );
+        // Note: This approach would require additional handling for text input
+      } catch (fallbackError) {
+        console.error('Fallback text creation also failed:', fallbackError);
+      }
+    }
+
+    console.log('Text shape created successfully');
+  };
+
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: "ai", 
@@ -42,99 +107,54 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
   const extractCanvasContext = () => {
     const shapes = getCanvasSnapshot();
     if (!shapes || !Array.isArray(shapes)) return [];
-    
-    // Extract just the useful parts following the clean structure
+
     const aiContext = shapes
-      .map((shape: any) => {
-        // Enhanced text extraction with comprehensive debugging
+      .map((shape) => {
         let extractedText = '';
-        
-        // Debug: Log the entire shape structure to understand tldraw's format
-        console.log(`\n=== Shape ${shape.id} (${shape.type}) ===`);
-        console.log('Full shape object:', shape);
-        console.log('Props:', shape.props);
-        
-        // Extract text content from tldraw's richText structure
-        if (shape.props) {
-          // Handle tldraw's richText format: props.richText.content[].content[].text
-          if (shape.props.richText && shape.props.richText.content) {
-            console.log('Found richText structure:', shape.props.richText);
-            
-            // Navigate through the nested content structure
-            const richTextContent = shape.props.richText.content;
-            if (Array.isArray(richTextContent) && richTextContent.length > 0) {
-              // Check each paragraph in the richText
-              for (const paragraph of richTextContent) {
-                if (paragraph.content && Array.isArray(paragraph.content)) {
-                  // Check each text segment in the paragraph
-                  for (const textSegment of paragraph.content) {
-                    if (textSegment.text) {
-                      extractedText += textSegment.text;
-                    }
-                  }
-                }
-              }
-            }
-          }
-          
-          // Fallback: Check other possible text property locations
-          if (!extractedText) {
-            const possibleTextProps = [
-              shape.props.text,
-              shape.props.content,
-              shape.props.value,
-              shape.props.label
-            ];
-            
-            possibleTextProps.forEach((textProp) => {
-              if (textProp && typeof textProp === 'string' && !extractedText) {
-                extractedText = textProp;
-              }
-            });
-          }
+
+        if (shape.props.richText?.content?.[0]?.content?.[0]?.text) {
+          extractedText = shape.props.richText.content[0].content[0].text;
         }
-        
-        console.log(`Final extracted text: "${extractedText}"`);
-        console.log('===================\n');
-        
+
         return {
           id: shape.id,
           type: shape.type,
           text: extractedText,
           x: Math.round(shape.x || 0),
           y: Math.round(shape.y || 0),
-          // Additional useful properties
           width: Math.round(shape.props?.w || 0),
-          height: Math.round(shape.props?.h || 0)
+          height: Math.round(shape.props?.h || 0),
         };
-      });
-    
+      })
+      .filter((item) => item.text); // Only include items with extracted text
+
     return aiContext;
   };
-  
-  // Method to create human-readable summary
-  const createCanvasSummary = (aiContext: any[]) => {
+
+  const createCanvasSummary = (aiContext) => {
     if (aiContext.length === 0) {
       return "The canvas is currently empty.";
     }
-    
-    const summary = aiContext.map((shape, i) => {
-      let description = `Item ${i + 1}: A ${shape.type}`;
-      
-      if (shape.text) {
-        description += ` that says "${shape.text}"`;
-      }
-      
-      description += ` at position (${shape.x}, ${shape.y})`;
-      
-      if (shape.width && shape.height) {
-        description += ` with dimensions ${shape.width}x${shape.height}`;
-      }
-      
-      return description;
-    }).join('\n');
-    
-    return `Canvas contents (${aiContext.length} items):\n${summary}`;
+
+    const summary = aiContext
+      .map((shape, i) => {
+        let description = `Item ${i + 1}: A ${shape.type}`;
+
+        if (shape.text) {
+          description += ` that says \"${shape.text}\"`;
+        }
+
+        description += ` at position (${shape.x}, ${shape.y})`;
+
+        return description;
+      })
+      .join('\n');
+
+    const canvasContents = aiContext.length > 0 ? `Canvas contents (${aiContext.length} items):\n${summary}` : "The canvas is currently empty.";
+
+    const actionsPrompt = `\n\nYou can also perform actions on the canvas. To add new text, respond with the following command format:\n\n\`\`\`\n[ACTION:ADD_TEXT]{"text": "your text here", "position": {"x": 123, "y": 456}}\n\`\`\`\n\n- The \`position\` is optional. If you don't provide it, the text will be placed in the center of the viewport.\n- You can add multiple text elements by including multiple action commands.\n- Always wrap the action command in code blocks as shown above.`;
+
+    return `${canvasContents}${actionsPrompt}`;
   };
   
   // Method to get canvas context for AI
@@ -237,10 +257,46 @@ const handleSend = async (e: FormEvent) => {
       const data = await response.json();
       
       if (data.success) {
-        setMessages((prev) => [...prev, { 
-          role: "ai", 
-          content: data.message
-        }]);
+        const aiMessage = data.message;
+        
+        // Add the AI's conversational message to the chat
+        // We'll strip out any action commands so they don't show up in the chat
+        const actionRegex = /\n? *`\[ACTION:ADD_TEXT\]({.*})`/s;
+        const conversationalMessage = aiMessage.replace(actionRegex, '').trim();
+
+        if (conversationalMessage) {
+            setMessages((prev) => [...prev, { 
+              role: "ai", 
+              content: conversationalMessage
+            }]);
+        }
+
+        // Check for and execute actions - support multiple actions
+        const actionMatches = aiMessage.matchAll(/```\s*\[ACTION:ADD_TEXT\]({.*?})\s*```/gs);
+        let actionExecuted = false;
+        
+        for (const match of actionMatches) {
+          if (match[1]) {
+            try {
+              const actionData = JSON.parse(match[1]);
+              console.log('Executing AI Action:', actionData);
+              if (actionData.text) {
+                addTextToCanvas({ text: actionData.text, position: actionData.position });
+                actionExecuted = true;
+              }
+            } catch (error) {
+              console.error("Failed to parse or execute AI action:", error);
+            }
+          }
+        }
+        
+        if (actionExecuted) {
+          // Add a message indicating action was performed
+          setMessages((prev) => [...prev, { 
+            role: "ai", 
+            content: "✨ Text added to canvas!"
+          }]);
+        }
       } else {
         // Fallback response if API fails
         setMessages((prev) => [...prev, { 
@@ -374,6 +430,19 @@ const handleSend = async (e: FormEvent) => {
                 </div>
               </Button>
             ))}
+            
+            {/* Test button for development */}
+            <Button
+              variant="outline"
+              onClick={() => addTextToCanvas({ text: "Test Text!" })}
+              className="h-auto p-3 justify-start text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 rounded-xl border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
+            >
+              <Zap className="w-4 h-4 mr-3" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">Test Add Text</div>
+                <div className="text-xs opacity-75">Add sample text to canvas</div>
+              </div>
+            </Button>
           </div>
         </div>
       )}
