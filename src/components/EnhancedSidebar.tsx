@@ -31,7 +31,12 @@ interface CanvasItem {
   created_at: string;
 }
 
-const EnhancedSidebar = () => {
+interface EnhancedSidebarProps {
+  isMobile?: boolean;
+  onMobileClose?: () => void;
+}
+
+const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarProps) => {
   const { activeCanvasId, setActiveCanvasId, loadCanvas, saveCanvasById } = useCanvas();
   // Helper to create a new canvas for the current user
   const createCanvas = async () => {
@@ -60,12 +65,42 @@ const EnhancedSidebar = () => {
     }
   };
   const { user, signOut, openLogin, requireAuth } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(isMobile);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
-  const [showUpgradeCard, setShowUpgradeCard] = useState(true);
+  const [showUpgradeCard, setShowUpgradeCard] = useState(!isMobile);
   const [showProfile, setShowProfile] = useState(false);
   const [canvases, setCanvases] = useState<CanvasItem[]>([]);
   const [loadingCanvases, setLoadingCanvases] = useState(false);
+
+  // Handle mobile menu interactions
+  const handleCanvasSelect = async (item: CanvasItem) => {
+    try {
+      if (item.id === activeCanvasId) {
+        // Close mobile menu if selecting same canvas
+        if (isMobile && onMobileClose) onMobileClose();
+        return;
+      }
+      
+      const oldCanvasId = activeCanvasId;
+      if (oldCanvasId) {
+        await saveCanvasById(oldCanvasId, true);
+      }
+      
+      setActiveCanvasId(item.id);
+      await loadCanvas(item.id);
+      
+      // Close mobile menu after selection
+      if (isMobile && onMobileClose) onMobileClose();
+    } catch (error) {
+      console.error('Failed to load canvas:', error);
+    }
+  };
+
+  const handleNewCanvas = async () => {
+    await createCanvas();
+    // Close mobile menu after creating canvas
+    if (isMobile && onMobileClose) onMobileClose();
+  };
 
   // Fetch canvases on mount / when user changes
   useEffect(() => {
@@ -252,7 +287,7 @@ const EnhancedSidebar = () => {
           {/* New Canvas Button */}
           <div className="p-4">
             <Button 
-               onClick={createCanvas}
+               onClick={handleNewCanvas}
                className="w-full justify-center h-11 font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.01] border border-slate-700 dark:border-slate-600"
              >
               <Plus className="h-4 w-4 mr-2" />
@@ -262,7 +297,7 @@ const EnhancedSidebar = () => {
           </div>
 
         {/* Canvas History */}
-        <div className="flex-1 overflow-auto px-4">
+        <div className="flex-1 overflow-auto px-4 custom-scrollbar">
           {Object.entries(canvasHistory)
             .filter(([, items]) => items.length > 0)
             .map(([period, items]) => (
@@ -276,27 +311,7 @@ const EnhancedSidebar = () => {
                       <Button
                         variant="ghost"
 className={`w-full justify-start h-9 text-sm font-medium pr-8 rounded-lg transition-all duration-200 hover:shadow-md ${item.id === activeCanvasId ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 hover:bg-gradient-to-r hover:from-sidebar-accent hover:to-sidebar-accent/50 hover:text-sidebar-accent-foreground'}`}
-                        onClick={async () => {
-                          try {
-                            // Don't switch if already active
-                            if (item.id === activeCanvasId) return;
-                            
-                            // Capture the current canvas ID before switching
-                            const oldCanvasId = activeCanvasId;
-                            
-                            // Save current canvas before switching (force save even if unchanged)
-                            if (oldCanvasId) {
-                              await saveCanvasById(oldCanvasId, true);
-                            }
-                            
-                            // Switch to new canvas
-                            setActiveCanvasId(item.id);
-                            await loadCanvas(item.id);
-                          } catch (error) {
-                            console.error('Failed to load canvas:', error);
-                            // You could show a toast notification here
-                          }
-                        }}
+                        onClick={() => handleCanvasSelect(item)}
                       >
                         <span className="flex-1 text-left truncate">{item.title}</span>
                       </Button>

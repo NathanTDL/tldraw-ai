@@ -20,9 +20,10 @@ interface Message {
 interface AISidebarProps {
   isCollapsed: boolean;
   onToggleCollapse: (collapsed: boolean) => void;
+  isMobile?: boolean;
 }
 
-export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarProps) {
+export default function AISidebar({ isCollapsed, onToggleCollapse, isMobile = false }: AISidebarProps) {
   const { requireAuth } = useAuth();
   const { editorRef, registerEditor } = useCanvas();
   const [uploadedImages, setUploadedImages] = useState<{ data: string; mimeType: string }[]>([]);
@@ -541,7 +542,11 @@ const handleSend = async (e: FormEvent) => {
 
   if (isCollapsed) {
     return (
-      <div className="fixed bottom-8 right-8 z-50 group">
+      <div className={`fixed z-50 group ${
+        isMobile 
+          ? 'bottom-20 right-4'
+          : 'bottom-8 right-8'
+      }`}>
         {/* Floating Canvas Assistant Button */}
         <div className="relative">
           {/* Subtle Glow Effect */}
@@ -550,14 +555,18 @@ const handleSend = async (e: FormEvent) => {
           {/* Main Button */}
           <Button
             onClick={() => onToggleCollapse(false)}
-            className="relative w-14 h-14 rounded-full bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-0 p-0 overflow-hidden group/button"
+            className={`relative rounded-full bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 border-0 p-0 overflow-hidden group/button ${
+              isMobile ? 'w-12 h-12' : 'w-14 h-14'
+            }`}
           >
             {/* Subtle Shimmer Effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/button:translate-x-full transition-transform duration-700" />
             
             {/* Canvas Icon */}
             <div className="relative z-10 flex items-center justify-center w-full h-full">
-              <Palette className="w-6 h-6 drop-shadow-sm" />
+              <Palette className={`drop-shadow-sm ${
+                isMobile ? 'w-5 h-5' : 'w-6 h-6'
+              }`} />
             </div>
           </Button>
           
@@ -565,16 +574,243 @@ const handleSend = async (e: FormEvent) => {
           <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm" />
         </div>
         
-        {/* Clean Tooltip */}
-        <div className="absolute bottom-full right-0 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0">
-          <div className="bg-slate-800/95 backdrop-blur-sm text-white text-sm px-3 py-2 rounded-lg shadow-xl border border-slate-600/20 whitespace-nowrap">
-            <div className="flex items-center gap-2">
-              <Palette className="w-3.5 h-3.5 text-slate-300" />
-              <span className="font-medium">Canvas Assistant</span>
+        {/* Clean Tooltip - Hide on mobile */}
+        {!isMobile && (
+          <div className="absolute bottom-full right-0 mb-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0">
+            <div className="bg-slate-800/95 backdrop-blur-sm text-white text-sm px-3 py-2 rounded-lg shadow-xl border border-slate-600/20 whitespace-nowrap">
+              <div className="flex items-center gap-2">
+                <Palette className="w-3.5 h-3.5 text-slate-300" />
+                <span className="font-medium">Canvas Assistant</span>
+              </div>
+              <div className="absolute top-full right-3 w-0 h-0 border-l-3 border-r-3 border-t-3 border-transparent border-t-slate-800/95" />
             </div>
-            <div className="absolute top-full right-3 w-0 h-0 border-l-3 border-r-3 border-t-3 border-transparent border-t-slate-800/95" />
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // Mobile full-screen modal
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-950">
+        {/* Mobile Header */}
+        <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-slate-700 dark:bg-slate-600 flex items-center justify-center shadow-md">
+              <Palette className="w-4 h-4 text-white" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Canvas Assistant
+            </h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onToggleCollapse(true)}
+            className="w-10 h-10 p-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+          >
+            <X className="w-5 h-5 text-slate-400" />
+          </Button>
+        </header>
+
+        {/* Quick Actions - Mobile */}
+        {messages.length <= 1 && (
+          <div className="p-4 border-b border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/50">
+            <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {quickActions.map((action, i) => (
+                <Button
+                  key={i}
+                  variant="ghost"
+                  onClick={() => {
+                    setInput(action.action);
+                    inputRef.current?.focus();
+                  }}
+                  className="h-auto p-3 justify-start text-left hover:bg-white dark:hover:bg-slate-700 transition-all duration-200 rounded-xl group border border-slate-200/50 dark:border-slate-700/50"
+                >
+                  <action.icon className="w-4 h-4 mr-2 text-slate-600 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-xs">{action.label}</div>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Image upload preview - Mobile */}
+        {uploadedImages.length > 0 && (
+          <div className="p-4 border-b border-slate-200/60 dark:border-slate-700/60">
+            <div className="grid grid-cols-4 gap-2">
+              {uploadedImages.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img 
+                    src={`data:${image.mimeType};base64,${image.data}`} 
+                    alt={`upload-preview-${index}`} 
+                    className="rounded-lg object-cover w-full h-16" 
+                  />
+                  <button 
+                    onClick={() => removeUploadedImage(index)} 
+                    className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Messages Area - Mobile */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
+          {messages.map((m, i) => (
+            <div key={i} className={cn(
+              "flex items-start gap-3 group",
+              m.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+            )}>
+              {/* Avatar */}
+              <div className={cn(
+                "w-7 h-7 rounded-full flex items-center justify-center shrink-0 shadow-md",
+                m.role === 'user' 
+                  ? 'bg-slate-600 dark:bg-slate-500' 
+                  : 'bg-slate-700 dark:bg-slate-600'
+              )}>
+                {m.role === 'user' ? (
+                  <User className="w-3 h-3 text-white" />
+                ) : (
+                  <Palette className="w-3 h-3 text-white" />
+                )}
+              </div>
+              
+              {/* Message Bubble */}
+              <div className={cn(
+                "max-w-[80%] rounded-2xl px-4 py-3 shadow-sm transition-all duration-200",
+                m.role === 'user' 
+                  ? 'bg-slate-600 dark:bg-slate-500 text-white rounded-tr-md' 
+                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60 rounded-tl-md'
+              )}>
+                <div className="text-sm leading-relaxed">
+                  {m.role === 'ai' ? (
+                    <div className="prose prose-sm prose-slate dark:prose-invert max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div>
+                      {m.images && m.images.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {m.images.map((img, idx) => (
+                            <img key={idx} src={`data:${img.mimeType};base64,${img.data}`} alt={`user-image-${idx}`} className="rounded-lg max-w-full h-auto" style={{ maxHeight: '120px' }} />
+                          ))}
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          {/* Typing Indicator */}
+          {isTyping && (
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-slate-700 dark:bg-slate-600 flex items-center justify-center shadow-md">
+                <Palette className="w-3 h-3 text-white" />
+              </div>
+              <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-md px-4 py-3 border border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
         </div>
+
+        {/* Input Form - Mobile */}
+        <form id="ai-chat-form" onSubmit={handleSend} className="p-4 border-t border-slate-200/60 dark:border-slate-700/60 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
+          <div className="space-y-3">
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                placeholder="Type your message..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="w-full pl-4 pr-12 py-3 rounded-xl border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-200 text-sm placeholder:text-slate-400 resize-none min-h-[80px] max-h-[120px] overflow-y-auto"
+                disabled={isTyping}
+                rows={3}
+              />
+              
+              {/* Send Button */}
+              <Button
+                type="submit"
+                size="sm"
+                className="absolute bottom-2 right-2 w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white shadow-lg disabled:opacity-50"
+                disabled={(!input.trim() && uploadedImages.length === 0) || isTyping}
+              >
+                <Send className="w-3 h-3" />
+              </Button>
+            </div>
+            
+            {/* Bottom Controls */}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" size="sm" className="w-8 h-8 rounded-full" onClick={() => imageInputRef.current?.click()}>
+                  <Upload className="w-4 h-4" />
+                </Button>
+                <input 
+                  type="file"
+                  ref={imageInputRef}
+                  multiple 
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+                <Button type="button" variant="ghost" size="sm" className="w-8 h-8 rounded-full">
+                  <Camera className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {/* Model selector */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsModelOpen(!isModelOpen)}
+                  className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+                >
+                  {modelOptions.find((m) => m.value === selectedModel)?.label.split(' ')[0]}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {isModelOpen && (
+                  <div className="absolute bottom-full mb-2 right-0 w-40 bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg shadow-lg z-20">
+                    {modelOptions.map((m) => (
+                      <button
+                        key={m.value}
+                        onClick={() => {
+                          setSelectedModel(m.value);
+                          setIsModelOpen(false);
+                        }}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-xs hover:bg-slate-100 dark:hover:bg-slate-700',
+                          selectedModel === m.value && 'bg-slate-100 dark:bg-slate-700'
+                        )}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </form>
       </div>
     );
   }
@@ -658,7 +894,7 @@ const handleSend = async (e: FormEvent) => {
       )}
 
       {/* Enhanced Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth custom-scrollbar">
         {messages.map((m, i) => (
           <div key={i} className={cn(
             "flex items-start gap-3 group",

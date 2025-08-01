@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import "./globals.css";
@@ -7,8 +7,21 @@ import { CanvasProvider } from "@/contexts/CanvasProvider";
 import { LoginModal } from "@/components/LoginModal";
 
 export const metadata: Metadata = {
-  title: "Next.js 15 + shadcn/ui + Tailwind CSS",
-  description: "A modern, beautiful starter template with the latest tools",
+  title: "Weplit AI - Canvas & AI Assistant",
+  description: "Professional AI-powered canvas platform with intelligent assistance for creative projects",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Weplit AI",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({
