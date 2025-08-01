@@ -76,13 +76,20 @@ export default function Dashboard() {
 
       {/* ——— Center: Canvas placeholder ——— */}
       <main className={`
-        relative flex-1 bg-white dark:bg-gray-900 flex items-center justify-center
-        ${isMobile ? 'px-2 py-16' : 'px-4 py-4'}
+        relative flex-1 bg-white dark:bg-gray-900
+        ${isMobile 
+          ? 'p-0' // No padding on mobile - canvas starts from top
+          : 'px-4 py-4 flex items-center justify-center'
+        }
       `}>
-        <div className="w-full h-full relative">
+        <div className={`w-full h-full relative tldraw-canvas-wrapper ${
+          isMobile && (isMobileMenuOpen || !isAiSidebarCollapsed) ? 'tldraw-ui-hidden' : ''
+        }`}>
           <Tldraw
             persistenceKey="dashboard"
-            className="w-full h-full rounded-lg overflow-hidden"
+            className={`w-full h-full overflow-hidden ${
+              isMobile ? '' : 'rounded-lg'
+            }`}
             onMount={(e) => {
               editorRef.current = e;
               registerEditor(e);
