@@ -595,12 +595,12 @@ const handleSend = async (e: FormEvent) => {
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-950">
         {/* Mobile Header */}
-        <header className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
+        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-slate-700 dark:bg-slate-600 flex items-center justify-center shadow-md">
+            <div className="w-8 h-8 rounded-full bg-slate-700 dark:bg-slate-600 items-center justify-center shadow-md hidden">
               <Palette className="w-4 h-4 text-white" />
             </div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 md:block hidden">
               Canvas Assistant
             </h2>
           </div>
@@ -827,7 +827,7 @@ const handleSend = async (e: FormEvent) => {
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
             </div>
-            <div>
+            <div className="md:block hidden">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 Canvas Assistant
               </h2>

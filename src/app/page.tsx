@@ -43,14 +43,10 @@ export default function Dashboard() {
         <Button
           variant="outline"
           size="icon"
-          className="fixed top-4 left-4 z-50 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm shadow-lg border-slate-200 dark:border-slate-700"
+          className="fixed top-12 left-1 z-50 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm shadow-lg border-slate-200 dark:border-slate-700"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
-          {isMobileMenuOpen ? (
-            <X className="h-4 w-4" />
-          ) : (
-            <Menu className="h-4 w-4" />
-          )}
+          <Menu className="h-4 w-4" />
         </Button>
       )}
 

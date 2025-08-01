@@ -196,8 +196,8 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
       {isCollapsed ? (
         /* Collapsed Layout */
         <>
-          {/* Logo */}
-          <div className="flex justify-center p-4 border-b border-sidebar-border">
+          {/* Logo - Hidden on mobile */}
+          <div className="flex justify-center p-4 border-b border-sidebar-border md:flex hidden">
             <div className="relative">
               <Image 
                 src="/logowithout.png" 
@@ -254,8 +254,8 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
         <>
           {/* Header */}
           <div className="flex items-center justify-between border-b border-sidebar-border p-4">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
+            {/* Logo - Hidden on mobile */}
+            <div className="flex items-center gap-3 md:flex hidden">
               <div className="relative">
                 <Image 
                   src="/logowithout.png" 
@@ -273,12 +273,12 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
               </div>
             </div>
             
-            {/* Collapse Button */}
+            {/* Collapse Button - Hidden on mobile */}
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent md:flex hidden"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -367,7 +367,7 @@ className={`w-full justify-start h-9 text-sm font-medium pr-8 rounded-lg transit
 
                 
           {/* Profile Section */}
-          <div className="border-t border-sidebar-border p-4">
+          <div className={`border-t border-sidebar-border p-4 ${isMobile ? 'pb-8 mb-16' : ''}`}>
             {user ? (
               <div className="flex items-center gap-3">
                 <div className="relative cursor-pointer" onClick={() => window.location.href = '/profile'}>
