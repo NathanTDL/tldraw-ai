@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { useCanvas } from "@/contexts/CanvasProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Palette, Send, Sparkles, Minimize2, Plus, Zap, User, MessageSquare, ChevronDown } from "lucide-react";
+import { ChevronLeft, Palette, Send, Sparkles, Minimize2, Plus, Zap, User, MessageSquare, ChevronDown, Image, Camera, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,6 +13,7 @@ import remarkGfm from 'remark-gfm';
 interface Message {
   role: "user" | "ai";
   content: string;
+  images?: { data: string; mimeType: string }[]; // Added to support images
   timestamp?: Date;
 }
 
@@ -24,6 +25,128 @@ interface AISidebarProps {
 export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarProps) {
   const { requireAuth } = useAuth();
   const { editorRef, registerEditor } = useCanvas();
+  const [uploadedImages, setUploadedImages] = useState<{ data: string; mimeType: string }[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Method to handle image uploads
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      const imagePromises = files.map(file => {
+        return new Promise<{ data: string; mimeType: string }>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (reader.result) {
+              resolve({ 
+                data: (reader.result as string).split(',')[1], // Get base64 part
+                mimeType: file.type 
+              });
+            } else {
+              reject(new Error('Failed to read file'));
+            }
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(imagePromises).then(newImages => {
+        setUploadedImages(prev => [...prev, ...newImages]);
+      });
+    }
+  };
+
+  // Method to remove an uploaded image
+  const removeUploadedImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Method to add an image to the canvas
+  const addImageToCanvas = ({ imageData, position }: { imageData: string; position?: { x: number; y: number } }) => {
+    if (!editorRef.current) {
+      console.error('Editor not available');
+      return;
+    }
+
+    let finalPosition = position;
+    if (!finalPosition) {
+      const viewport = editorRef.current.getViewportScreenBounds();
+      finalPosition = {
+        x: viewport.x + viewport.w / 2,
+        y: viewport.y + viewport.h / 2,
+      };
+    }
+
+    try {
+      const assetId = `asset:${Date.now()}`;
+      const shapeId = `shape:image_${Date.now()}`;
+      const imageUrl = `data:image/png;base64,${imageData}`;
+
+      // Create the asset first
+      const asset = {
+        id: assetId,
+        type: 'image' as const,
+        typeName: 'asset' as const,
+        props: {
+          name: 'Generated Image',
+          src: imageUrl,
+          w: 512,
+          h: 512,
+          mimeType: 'image/png',
+          isAnimated: false,
+        },
+        meta: {},
+      };
+
+      // Create the shape
+      const shape = {
+        id: shapeId,
+        type: 'image' as const,
+        typeName: 'shape' as const,
+        x: finalPosition.x - 256, // Center the image
+        y: finalPosition.y - 256, // Center the image
+        rotation: 0,
+        index: 'a1' as const,
+        parentId: editorRef.current.getCurrentPageId(),
+        isLocked: false,
+        opacity: 1,
+        meta: {},
+        props: {
+          assetId: assetId,
+          w: 512,
+          h: 512,
+          playing: true,
+          url: '',
+          crop: null,
+        },
+      };
+
+      // Create both asset and shape
+      editorRef.current.createAssets([asset]);
+      editorRef.current.createShapes([shape]);
+      
+      console.log('Image added to canvas successfully');
+    } catch (error) {
+      console.error('Failed to add image to canvas:', error);
+      // Fallback: try a simpler approach
+      try {
+        const simpleShape = {
+          id: `shape:image_${Date.now()}`,
+          type: 'image',
+          x: finalPosition.x - 256,
+          y: finalPosition.y - 256,
+          props: {
+            url: `data:image/png;base64,${imageData}`,
+            w: 512,
+            h: 512,
+          },
+        };
+        editorRef.current.createShapes([simpleShape]);
+      } catch (fallbackError) {
+        console.error('Fallback image creation also failed:', fallbackError);
+      }
+    }
+  };
 
   // Method to add text to the canvas
   const addTextToCanvas = ({ text, position }: { text: string; position?: { x: number; y: number } }) => {
@@ -178,11 +301,12 @@ export default function AISidebar({ isCollapsed, onToggleCollapse }: AISidebarPr
     };
   };
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp");
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
 const [isModelOpen, setIsModelOpen] = useState(false);
 
 const modelOptions = [
-  { value: "gemini-2.0-flash-exp", label: "Gemini Flash (Active)" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { value: "flux-schnell", label: "FLUX Schnell (Images)" },
   { value: "gpt-4", label: "GPT-4 (Coming Soon)" },
   { value: "claude-3", label: "Claude 3 (Coming Soon)" }
 ];
@@ -225,13 +349,15 @@ const handleSend = async (e: FormEvent) => {
     if (!requireAuth()) return;
     e.preventDefault();
     const userMessage = input.trim();
-    if (!userMessage) return;
+    if (!userMessage && uploadedImages.length === 0) return;
     
     setMessages((prev) => [...prev, { 
       role: "user", 
-      content: userMessage
+      content: userMessage,
+      images: uploadedImages
     }]);
     setInput("");
+    setUploadedImages([]); // Clear uploaded images after sending
     setIsTyping(true);
     
     try {
@@ -250,7 +376,8 @@ const handleSend = async (e: FormEvent) => {
         body: JSON.stringify({
           message: userMessage,
           context: context.description,
-          conversationHistory: conversationHistory
+          conversationHistory: conversationHistory,
+          images: uploadedImages // Send images to the backend
         })
       });
       
@@ -271,7 +398,79 @@ const handleSend = async (e: FormEvent) => {
             }]);
         }
 
-        // Check for and execute actions - support multiple actions
+        // Check for image generation commands
+        const imageGenMatches = aiMessage.match(/\[GENERATE_IMAGE:(.+?)\]/g);
+        if (imageGenMatches) {
+          for (const match of imageGenMatches) {
+            const promptMatch = match.match(/\[GENERATE_IMAGE:(.+?)\]/);
+            if (promptMatch && promptMatch[1]) {
+              const imagePrompt = promptMatch[1].trim();
+              console.log('Generating image with prompt:', imagePrompt);
+              
+              // Call image generation API
+              try {
+                const imageResponse = await fetch('/api/generate-image', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    prompt: imagePrompt,
+                    numberOfImages: 1
+                  })
+                });
+                
+                const imageData = await imageResponse.json();
+                console.log('Image API Response:', imageData);
+                
+                if (imageData.success && imageData.images && imageData.images.length > 0) {
+                  const firstImage = imageData.images[0];
+                  console.log('First image data:', firstImage);
+                  
+                  // Check if we have base64 data (server handles all conversions)
+                  if (firstImage.imageData && firstImage.imageData !== 'undefined' && firstImage.imageData.length > 0) {
+                    console.log('Adding image to canvas with base64 data length:', firstImage.imageData.length);
+                    
+                    // Add the generated image to the canvas
+                    addImageToCanvas({ imageData: firstImage.imageData });
+                    
+                    // Add a success message
+                    setMessages((prev) => [...prev, { 
+                      role: "ai", 
+                      content: `✨ Generated and added image: "${imagePrompt}" to the canvas!`
+                    }]);
+                  } else {
+                    console.error('Image data is missing or invalid:', {
+                      hasImageData: !!firstImage.imageData,
+                      imageDataType: typeof firstImage.imageData,
+                      imageDataLength: firstImage.imageData?.length,
+                      fullImageObject: firstImage
+                    });
+                    setMessages((prev) => [...prev, { 
+                      role: "ai", 
+                      content: `❌ Generated image but data is invalid. Server may have failed to process the image.`
+                    }]);
+                  }
+                } else {
+                  console.error('Image generation failed:', imageData);
+                  // Add error message
+                  setMessages((prev) => [...prev, { 
+                    role: "ai", 
+                    content: `❌ Failed to generate image: ${imageData.message || 'Unknown error'}`
+                  }]);
+                }
+              } catch (error) {
+                console.error('Image generation error:', error);
+                setMessages((prev) => [...prev, { 
+                  role: "ai", 
+                  content: `❌ Error generating image: ${error.message}`
+                }]);
+              }
+            }
+          }
+        }
+
+        // Check for and execute text actions - support multiple actions
         const actionMatches = aiMessage.matchAll(/```\s*\[ACTION:ADD_TEXT\]({.*?})\s*```/gs);
         let actionExecuted = false;
         
@@ -324,6 +523,7 @@ const handleSend = async (e: FormEvent) => {
       // Canvas is empty
       return [
         { icon: Sparkles, label: "Get started", action: "How should I start organizing my ideas on this canvas?" },
+        { icon: Image, label: "Generate image", action: "Generate an image of a futuristic cityscape" },
         { icon: Zap, label: "Templates", action: "Show me some canvas templates to get started" },
         { icon: Plus, label: "First steps", action: "What's the best way to begin a new project on this canvas?" }
       ];
@@ -331,7 +531,7 @@ const handleSend = async (e: FormEvent) => {
       // Canvas has content
       return [
         { icon: Sparkles, label: "Analyze canvas", action: "What do you think of my current canvas layout?" },
-        { icon: Zap, label: "Improve", action: "How can I improve and organize what's on my canvas?" },
+        { icon: Image, label: "Add image", action: "Generate an image that complements what's on my canvas" },
         { icon: Plus, label: "Next steps", action: "What should I add next to complete this project?" }
       ];
     }
@@ -430,19 +630,29 @@ const handleSend = async (e: FormEvent) => {
                 </div>
               </Button>
             ))}
-            
-            {/* Test button for development */}
-            <Button
-              variant="outline"
-              onClick={() => addTextToCanvas({ text: "Test Text!" })}
-              className="h-auto p-3 justify-start text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 rounded-xl border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
-            >
-              <Zap className="w-4 h-4 mr-3" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm">Test Add Text</div>
-                <div className="text-xs opacity-75">Add sample text to canvas</div>
+          </div>
+        </div>
+      )}
+
+      {/* Image upload preview */}
+      {uploadedImages.length > 0 && (
+        <div className="p-4 border-b border-slate-200/60 dark:border-slate-700/60">
+          <div className="grid grid-cols-3 gap-2">
+            {uploadedImages.map((image, index) => (
+              <div key={index} className="relative group">
+                <img 
+                  src={`data:${image.mimeType};base64,${image.data}`} 
+                  alt={`upload-preview-${index}`} 
+                  className="rounded-lg object-cover w-full h-24" 
+                />
+                <button 
+                  onClick={() => removeUploadedImage(index)} 
+                  className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
-            </Button>
+            ))}
           </div>
         </div>
       )}
@@ -499,7 +709,16 @@ const handleSend = async (e: FormEvent) => {
                     </ReactMarkdown>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap">{m.content}</div>
+                  <div>
+                    {m.images && m.images.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {m.images.map((img, idx) => (
+                          <img key={idx} src={`data:${img.mimeType};base64,${img.data}`} alt={`user-image-${idx}`} className="rounded-lg max-w-full h-auto" style={{ maxHeight: '150px' }} />
+                        ))}
+                      </div>
+                    )}
+                    <div className="whitespace-pre-wrap">{m.content}</div>
+                  </div>
                 )}
               </div>
             </div>
@@ -539,6 +758,24 @@ const handleSend = async (e: FormEvent) => {
               rows={4}
             />
 
+            {/* Image upload and generation buttons */}
+            <div className="absolute bottom-2 left-2 flex gap-1">
+              <Button type="button" variant="ghost" size="icon" className="w-8 h-8 rounded-full" onClick={() => imageInputRef.current?.click()}>
+                <Upload className="w-4 h-4" />
+              </Button>
+              <input 
+                type="file"
+                ref={imageInputRef}
+                multiple 
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <Button type="button" variant="ghost" size="icon" className="w-8 h-8 rounded-full">
+                <Camera className="w-4 h-4" />
+              </Button>
+            </div>
+
             {/* Model selector row */}
             <div className="relative mt-2 flex items-center justify-between">
               <button
@@ -576,7 +813,7 @@ const handleSend = async (e: FormEvent) => {
             type="submit"
             size="sm"
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            disabled={!input.trim() || isTyping}
+            disabled={(!input.trim() && uploadedImages.length === 0) || isTyping}
           >
             <Send className="w-4 h-4" />
           </Button>
