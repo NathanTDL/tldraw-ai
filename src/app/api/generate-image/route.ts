@@ -52,11 +52,12 @@ export async function POST(request: NextRequest) {
         console.log(`Image ${index} available keys:`, Object.keys(imageData));
         
         // Together AI might return different property names - check all possibilities
-        let base64Data = imageData.b64_json || 
-                        imageData.image || 
-                        imageData.data || 
-                        imageData.base64 ||
-                        imageData.url;
+        const img: any = imageData as any;
+        let base64Data = img.b64_json || 
+                        img.image || 
+                        img.data || 
+                        img.base64 ||
+                        img.url;
         
         // If we got a URL, we need to fetch and convert it
         if (!base64Data) {
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
               };
             } catch (error) {
               console.error(`Failed to convert URL to base64 for image ${img.index}:`, error);
-              throw new Error(`Failed to process image ${img.index}: ${error.message}`);
+              throw new Error(`Failed to process image ${img.index}: ${(error as Error).message}`);
             }
           }
           return img;
@@ -127,14 +128,14 @@ export async function POST(request: NextRequest) {
         { 
           success: false, 
           error: 'Image generation failed',
-          message: `Together AI error: ${error.message || 'Unknown error'}`
+          message: `Together AI error: ${(error as Error).message || 'Unknown error'}`
         },
         { status: 500 }
       );
     }
 
   } catch (error) {
-    console.error('Image generation error:', error);
+    console.error('Image generation error:', error as Error);
     return NextResponse.json(
       { 
         success: false, 

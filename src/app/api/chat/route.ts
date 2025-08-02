@@ -46,7 +46,7 @@ User Message: ${message}`;
     }
 
     // Prepare content for Gemini (text + images if provided)
-    let contentParts = [conversationText];
+    let contentParts: any[] = [conversationText];
     
     // Add images to the request if provided
     if (images && images.length > 0) {

@@ -1,5 +1,8 @@
 "use client";
 
+// Disable prerendering for this page so it renders at request time with proper providers
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { Button } from "@/components/ui/button";
