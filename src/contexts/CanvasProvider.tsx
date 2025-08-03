@@ -14,6 +14,7 @@ interface CanvasContextValue {
   loadCanvas: (id: string) => Promise<void>;
   createNewCanvas: () => Promise<string | null>;
   isSaving: boolean;
+  isLoading: boolean;
   lastSaved: Date | null;
   editorRef: React.MutableRefObject<Editor | null>;
 }
@@ -23,6 +24,7 @@ const CanvasContext = createContext<CanvasContextValue | null>(null);
 export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const editorRef = useRef<Editor | null>(null);
@@ -92,11 +94,11 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
     }
     
     console.log(`Loading canvas with ID: ${id}`);
+    setIsLoading(true);
     
-    // Clear current canvas content first
-    clearCanvasContent();
-
     try {
+      // Clear current canvas content first
+      clearCanvasContent();
       const { data, error } = await supabase
         .from("canvases")
         .select("data")
@@ -170,6 +172,8 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       
     } catch (error) {
       console.error("Error loading canvas:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -177,6 +181,7 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
   const createNewCanvas = useCallback(async (): Promise<string | null> => {
     try {
       console.log('🎨 Creating new canvas...');
+      setIsLoading(true);
       
       // Check if user is authenticated
       const { data: { user } } = await supabase.auth.getUser();
@@ -192,13 +197,22 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       // Generate a proper UUID for the canvas
       const canvasId = generateUUID();
       
+      // Generate a title with current date/time
+      const now = new Date();
+      const title = now.toLocaleString('en-US', {
+        weekday: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      
       // Create an empty canvas in the database with all required fields
       const { data, error } = await supabase
         .from('canvases')
         .insert({
           id: canvasId,
           user_id: user.id,
-          title: 'Untitled Canvas',
+          title: title,
           data: {}, // Empty canvas data as object
           is_pinned: false
         })
@@ -214,6 +228,12 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       }
       
       console.log('✅ New canvas created with ID:', canvasId);
+      
+      // Clear the current canvas content to show empty state
+      if (editorRef.current) {
+        clearCanvasContent();
+      }
+      
       return canvasId;
       
     } catch (error) {
@@ -222,6 +242,8 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       const tempCanvasId = generateUUID();
       console.log('✅ Created temporary canvas ID due to error:', tempCanvasId);
       return tempCanvasId;
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -230,9 +252,11 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
     if (isInitialized || !editorRef.current) return;
     
     console.log('🚀 Initializing canvas provider...');
+    setIsLoading(true);
     
-    // Get last opened canvas from localStorage
-    const lastCanvasId = getLastCanvasId();
+    try {
+      // Get last opened canvas from localStorage
+      const lastCanvasId = getLastCanvasId();
     
     if (lastCanvasId) {
       console.log('📖 Attempting to restore last canvas:', lastCanvasId);
@@ -253,8 +277,7 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
           console.log('✅ Last canvas found in database, loading...');
           setActiveCanvasIdWithPersistence(lastCanvasId);
           await loadCanvas(lastCanvasId);
-          setIsInitialized(true);
-          return;
+          return; // Success, exit early
         } else {
           console.log('❌ Last canvas not found or not accessible, creating new one');
         }
@@ -263,14 +286,18 @@ export const CanvasProvider = ({ children }: { children: React.ReactNode }) => {
       }
     }
     
-    // Fallback: create a new canvas if no last canvas or it doesn't exist
-    console.log('📝 Creating new canvas as fallback...');
-    const newCanvasId = await createNewCanvas();
-    if (newCanvasId) {
-      setActiveCanvasIdWithPersistence(newCanvasId);
+      // Fallback: create a new canvas if no last canvas or it doesn't exist
+      console.log('📝 Creating new canvas as fallback...');
+      const newCanvasId = await createNewCanvas();
+      if (newCanvasId) {
+        setActiveCanvasIdWithPersistence(newCanvasId);
+      }
+    } catch (error) {
+      console.error('Error during canvas initialization:', error);
+    } finally {
+      setIsLoading(false);
+      setIsInitialized(true);
     }
-    
-    setIsInitialized(true);
   }, [isInitialized, createNewCanvas, setActiveCanvasIdWithPersistence]);
   
   useEffect(() => {
@@ -506,6 +533,7 @@ forceSaveCurrentCanvas,
     loadCanvas,
     createNewCanvas,
     isSaving,
+    isLoading,
     lastSaved,
     editorRef,
   };

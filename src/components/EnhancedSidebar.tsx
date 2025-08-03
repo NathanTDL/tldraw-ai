@@ -17,7 +17,8 @@ import {
   Sparkles,
   Crown,
   Zap,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
@@ -37,33 +38,7 @@ interface EnhancedSidebarProps {
 }
 
 const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarProps) => {
-  const { activeCanvasId, setActiveCanvasId, loadCanvas, saveCanvasById } = useCanvas();
-  // Helper to create a new canvas for the current user
-  const createCanvas = async () => {
-    if (!user) {
-      openLogin();
-      return;
-    }
-    const now = new Date();
-    const title = now.toLocaleString('en-US', {
-      weekday: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    const { data, error } = await supabase.from('canvases')
-      .insert({ user_id: user.id, title })
-      .select('id')
-      .single();
-    if (error) {
-      console.error('Create canvas error', error);
-    } else {
-      // Set as active and load the new empty canvas
-      setActiveCanvasId(data.id);
-      await loadCanvas(data.id);
-      refresh();
-    }
-  };
+  const { activeCanvasId, setActiveCanvasId, loadCanvas, saveCanvasById, createNewCanvas, isLoading } = useCanvas();
   const { user, signOut, openLogin, requireAuth } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(isMobile);
   const [activeContextMenu, setActiveContextMenu] = useState<string | null>(null);
@@ -97,9 +72,25 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
   };
 
   const handleNewCanvas = async () => {
-    await createCanvas();
-    // Close mobile menu after creating canvas
-    if (isMobile && onMobileClose) onMobileClose();
+    try {
+      if (!user) {
+        openLogin();
+        return;
+      }
+      
+      // Create new canvas using the context method
+      const newCanvasId = await createNewCanvas();
+      if (newCanvasId) {
+        setActiveCanvasId(newCanvasId);
+        // Refresh the sidebar canvas list
+        await refresh();
+      }
+      
+      // Close mobile menu after creating canvas
+      if (isMobile && onMobileClose) onMobileClose();
+    } catch (error) {
+      console.error('Failed to create new canvas:', error);
+    }
   };
 
   // Fetch canvases on mount / when user changes
@@ -199,14 +190,18 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
           {/* Logo - Hidden on mobile */}
           <div className="flex justify-center p-4 border-b border-sidebar-border md:flex hidden">
             <div className="relative">
-              <Image 
-                src="/logowithout.png" 
-                alt="Weplit AI Logo" 
-                width={28} 
-                height={28}
-                className="rounded-md"
-                style={{ width: 'auto', height: 'auto' }}
-              />
+              {isLoading ? (
+                <Loader2 className="h-7 w-7 animate-spin text-sidebar-foreground/70" />
+              ) : (
+                <Image 
+                  src="/logowithout.png" 
+                  alt="Weplit AI Logo" 
+                  width={28} 
+                  height={28}
+                  className="rounded-md"
+                  style={{ width: 'auto', height: 'auto' }}
+                />
+              )}
             </div>
           </div>
           
@@ -288,16 +283,35 @@ const EnhancedSidebar = ({ isMobile = false, onMobileClose }: EnhancedSidebarPro
           <div className="p-4">
             <Button 
                onClick={handleNewCanvas}
-               className="w-full justify-center h-11 font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.01] border border-slate-700 dark:border-slate-600"
+               disabled={isLoading}
+               className="w-full justify-center h-11 font-semibold bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.01] border border-slate-700 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
              >
-              <Plus className="h-4 w-4 mr-2" />
-              <Sparkles className="h-3.5 w-3.5 mr-1" />
-              New Canvas
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  <Sparkles className="h-3.5 w-3.5 mr-1" />
+                  New Canvas
+                </>
+              )}
             </Button>
           </div>
 
         {/* Canvas History */}
         <div className="flex-1 overflow-auto px-4 custom-scrollbar">
+          {/* Loading Spinner */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-3 text-sidebar-foreground/70">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm font-medium">Loading canvas...</span>
+              </div>
+            </div>
+          )}
           {Object.entries(canvasHistory)
             .filter(([, items]) => items.length > 0)
             .map(([period, items]) => (
